@@ -1,4 +1,0 @@
-Flask
-pylxd
-configparser
-flask-restx
