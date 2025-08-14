@@ -1,0 +1,289 @@
+<style>
+.resource-card { transition: transform 0.2s ease-in-out; }
+.resource-card:hover { transform: translateY(-2px); }
+.border-left-primary { border-left: .25rem solid #4e73df!important; }
+.border-left-success { border-left: .25rem solid #1cc88a!important; }
+.border-left-info { border-left: .25rem solid #36b9cc!important; }
+.border-left-warning { border-left: .25rem solid #f6c23e!important; }
+.shadow-sm { box-shadow: 0 .125rem .25rem rgba(0,0,0,.075)!important; }
+.progress { height: 6px; border-radius: 3px; }
+.badge { font-size: 0.75em; }
+</style>
+
+<!-- 容器状态监控 -->
+<div class="card shadow mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="m-0 font-weight-bold text-primary">容器状态监控</h6>
+            <small class="text-muted">实时显示容器资源使用情况</small>
+            <span class="badge badge-info mt-1">
+                最后更新: <span id="last-update">刚刚</span>
+            </span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="refreshInfoPage()">
+            <i class="fas fa-sync-alt mr-1"></i>刷新
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card border-left-primary shadow-sm resource-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-primary mb-1">
+                                    <i class="fas fa-microchip mr-1"></i>CPU使用率
+                                </h6>
+                                <h4 class="mb-0" id="cpu-info">
+                                    加载中...
+                                </h4>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar bg-primary" style="width: 0%" id="cpu-progress"></div>
+                                </div>
+                            </div>
+                            <i class="fas fa-microchip fa-2x text-primary" style="opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-left-success shadow-sm resource-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-success mb-1">
+                                    <i class="fas fa-memory mr-1"></i>内存使用
+                                </h6>
+                                <h4 class="mb-0" id="memory-info">
+                                    加载中...
+                                </h4>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar bg-success" style="width: 0%" id="memory-progress"></div>
+                                </div>
+                            </div>
+                            <i class="fas fa-memory fa-2x text-success" style="opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-left-info shadow-sm resource-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-info mb-1">
+                                    <i class="fas fa-hdd mr-1"></i>硬盘使用
+                                </h6>
+                                <h4 class="mb-0" id="disk-info">
+                                    加载中...
+                                </h4>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar bg-info" style="width: 0%" id="disk-progress"></div>
+                                </div>
+                            </div>
+                            <i class="fas fa-hdd fa-2x text-info" style="opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-left-warning shadow-sm resource-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-warning mb-1">
+                                    <i class="fas fa-exchange-alt mr-1"></i>流量使用
+                                </h6>
+                                <h4 class="mb-0" id="traffic-info">
+                                    加载中...
+                                </h4>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar bg-warning" style="width: 0%" id="traffic-progress"></div>
+                                </div>
+                            </div>
+                            <i class="fas fa-exchange-alt fa-2x text-warning" style="opacity: 0.3;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 使用说明 -->
+<div class="card shadow">
+    <div class="card-header">
+        <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-question-circle mr-2"></i>使用说明
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+            <i class="fas fa-key text-success mr-3"></i>
+            <div>初始密码已在开通时设置，可直接登录</div>
+        </div>
+        <div class="d-flex align-items-center mb-3">
+            <i class="fas fa-clock text-warning mr-3"></i>
+            <div>部分操作响应较慢，请耐心等待</div>
+        </div>
+        <div class="d-flex align-items-center mb-0">
+            <i class="fas fa-cog text-secondary mr-3"></i>
+            <div>SSH端口转发已自动配置</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// INFO调试模式开关
+const INFO_DEBUG_MODE = false;
+
+// 全局变量
+var currentInfoContainerId = '';
+
+function infoDebug(message, data) {
+    if (INFO_DEBUG_MODE) {
+        console.log('[INFO-DEBUG]', message, data);
+    }
+}
+
+// 刷新信息页面（AJAX方式，不刷新整个页面）
+function refreshInfoPage() {
+    infoDebug('手动刷新信息页面');
+    updateLastUpdateTime();
+    loadContainerInfo();
+}
+
+// 暴露到全局，兼容调用
+window.refreshInfoPage = refreshInfoPage;
+
+// 更新最后更新时间
+function updateLastUpdateTime() {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('zh-CN', {
+        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const lastUpdateElement = document.getElementById('last-update');
+    if (lastUpdateElement) {
+        lastUpdateElement.textContent = timeString;
+    }
+}
+
+function loadContainerInfo() {
+    // 如果已有容器ID，直接使用；否则从URL获取
+    if (!currentInfoContainerId) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const containerId = urlParams.get('id');
+
+        if (!containerId) {
+            showError('无法获取容器ID');
+            return;
+        }
+        currentInfoContainerId = containerId;
+    }
+
+    $('#last-update').html('<i class="fas fa-spinner fa-spin"></i> 更新中...');
+    loadAllInfoData(currentInfoContainerId);
+}
+
+function loadAllInfoData(containerId) {
+    const timestamp = new Date().getTime();
+    const infoUrl = `/provision/custom/content?id=${containerId}&key=info&action=getinfoall&_t=${timestamp}`;
+
+    infoDebug('API请求', infoUrl);
+
+    $.ajax({
+        url: infoUrl,
+        method: 'GET',
+        dataType: 'json',
+        timeout: 10000,
+        cache: false,
+        success: function(response) {
+            infoDebug('API响应', response);
+            if (response && response.code === 200 && response.data) {
+                updateAllInfo(response.data);
+            } else {
+                showError(response.msg || '获取容器信息失败');
+            }
+        },
+        error: function(xhr, status, error) {
+            infoDebug('API请求失败', {status: xhr.status, error: error});
+            showError('网络请求失败: ' + error);
+        }
+    });
+}
+
+function updateAllInfo(data) {
+    // 更新CPU信息
+    const cpuUsage = data.cpu_usage || 0;
+    const cpuCores = data.cpus || 'N/A';
+    $('#cpu-info').text(`${cpuUsage}% (${cpuCores} Core)`);
+    $('#cpu-progress').css('width', Math.min(parseFloat(cpuUsage) || 0, 100) + '%');
+
+    // 更新内存信息
+    const memoryUsage = data.memory_usage || 'N/A';
+    const memoryTotal = (data.config && data.config.memory) || 'N/A';
+    const memoryPercent = parseFloat(data.memory_percent) || 0;
+    $('#memory-info').text(`${memoryUsage} / ${memoryTotal}`);
+    $('#memory-progress').css('width', Math.min(memoryPercent, 100) + '%');
+
+    // 更新硬盘信息
+    const diskUsage = data.disk_usage || 'N/A';
+    const diskTotal = (data.config && data.config.disk) || 'N/A';
+    const diskPercent = parseFloat(data.disk_percent) || 0;
+    $('#disk-info').text(`${diskUsage} / ${diskTotal}`);
+    $('#disk-progress').css('width', Math.min(diskPercent, 100) + '%');
+
+    // 更新流量信息
+    const trafficUsage = data.traffic_usage || 'N/A';
+    $('#traffic-info').text(`累计: ${trafficUsage}`);
+    $('#traffic-progress').css('width', '10%');
+
+    // 更新时间
+    if (data.last_update) {
+        $('#last-update').text(data.last_update);
+    } else {
+        updateLastUpdateTime();
+    }
+}
+
+function showError(message) {
+    $('#cpu-info').text('加载失败');
+    $('#memory-info').text('加载失败');
+    $('#disk-info').text('加载失败');
+    $('#traffic-info').text('加载失败');
+
+    // 显示错误时间
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('zh-CN', {
+        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    $('#last-update').text(`${timeString} (错误)`);
+    infoDebug('加载错误', message);
+}
+
+$(document).ready(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const containerId = urlParams.get('id');
+
+    if (!containerId) {
+        showError('无法获取容器ID');
+        return;
+    }
+
+    // 设置全局容器ID
+    currentInfoContainerId = containerId;
+    infoDebug('设置容器ID', containerId);
+
+    // 初始化时间显示
+    updateLastUpdateTime();
+
+    // 首次加载
+    loadContainerInfo();
+
+    // 每10秒自动刷新
+    setInterval(function() {
+        infoDebug('定时器触发，刷新容器信息');
+        loadContainerInfo();
+    }, 10000);
+});
+</script>
