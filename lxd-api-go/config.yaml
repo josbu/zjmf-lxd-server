@@ -1,0 +1,109 @@
+# LXD API 配置文件
+server:
+  # API服务端口
+  port: 8080
+  # 服务模式 (debug/release)
+  mode: release
+  # TLS配置 (启用HTTPS/WSS)
+  tls:
+    enabled: true                    # 启用TLS
+    cert_file: "server.crt"         # SSL证书文件路径
+    key_file: "server.key"          # SSL私钥文件路径
+    auto_gen: true                   # 自动生成自签证书
+    server_ips:                      # 服务器IP列表（用于证书SAN）
+      - "173.208.194.82"           # 外网IP
+      - "localhost"                 # 本地访问
+      - "127.0.0.1"                # 本地IP
+
+# 安全配置
+security:
+  # 是否启用hash验证
+  enable_auth: true
+  # API访问hash (用于验证请求)
+  api_hash: "384fde3636e6e01e0194d2976d8f26410af3e846e573379cb1a09e2f0752d8cc"
+  # hash过期时间(小时)
+  hash_expire_hours: 24
+
+# 数据库配置
+database:
+  # 数据库文件路径
+  path: "lxdapi.db"
+  # 是否启用数据库日志
+  enable_log: false
+
+# LXC命令配置
+lxc:
+  # 命令超时时间(秒)
+  timeout: 60
+  # 是否启用详细日志
+  verbose: false
+
+# 任务配置
+task:
+  # 最大并发任务数
+  max_concurrent: 10
+  # 任务历史保留天数
+  history_days: 30
+  # 是否启用任务执行日志
+  enable_log: true
+
+# 流量统计配置
+traffic:
+  # 统计间隔（秒）
+  interval: 5
+  # 是否启用详细日志
+  enable_log: false
+
+# 容器操作配置
+container:
+  # 是否启用容器操作详细日志
+  enable_log: false
+
+# NAT端口转发配置
+nat:
+  # 是否启用NAT操作详细日志
+  enable_log: false
+
+# Web控制台配置
+console:
+  # 是否启用Web控制台功能
+  enabled: true
+  # 控制台会话超时时间（秒）
+  session_timeout: 1800
+  # 是否启用控制台操作日志
+  enable_log: false
+
+# CORS跨域配置
+cors:
+  # 是否启用CORS（生产环境建议启用）
+  enabled: true
+  # 允许的源（生产环境建议配置具体域名）
+  allow_origins:
+    - "*"  # 开发环境可以使用*，生产环境建议配置具体域名
+    # - "https://yourdomain.com"
+    # - "https://admin.yourdomain.com"
+  # 允许的HTTP方法
+  allow_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+    - "PATCH"
+  # 允许的请求头
+  allow_headers:
+    - "Origin"
+    - "Content-Type"
+    - "Accept"
+    - "Authorization"
+    - "X-API-Hash"
+    - "X-Requested-With"
+    - "apikey"  # API密钥头部
+  # 暴露的响应头
+  expose_headers:
+    - "Content-Length"
+    - "X-Total-Count"
+  # 是否允许凭证
+  allow_credentials: true
+  # 预检请求缓存时间（秒）
+  max_age: 86400
