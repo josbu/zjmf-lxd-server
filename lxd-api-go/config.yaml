@@ -73,6 +73,28 @@ console:
   # 是否启用控制台操作日志
   enable_log: false
 
+# 流量限制配置
+traffic_limit:
+  # 是否启用流量限制功能
+  enabled: true
+  # 检查间隔（秒）
+  check_interval_seconds: 5
+  # 是否启用详细日志
+  enable_log: false
+  # 超限后是否自动暂停
+  auto_suspend: true
+
+# 数据库清理配置
+database_cleanup:
+  # 是否启用数据库清理功能
+  enabled: true
+  # 检查间隔（小时）
+  check_interval_hours: 1
+  # 是否启用详细日志
+  enable_log: false
+  # 是否自动清理孤立记录
+  auto_cleanup: true
+
 # CORS跨域配置
 cors:
   # 是否启用CORS（生产环境建议启用）
