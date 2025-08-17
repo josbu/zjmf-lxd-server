@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # ZJMF LXD Server 一键安装脚本
-# 版本: v0.0.2
 
 set -e
 
@@ -15,11 +14,13 @@ NC='\033[0m' # No Color
 
 # 配置变量
 GITHUB_REPO="https://github.com/xkatld/zjmf-lxd-server"
-VERSION="v0.0.2"
+GITHUB_API="https://api.github.com/repos/xkatld/zjmf-lxd-server"
+VERSION=""  # 将动态获取
 SERVICE_NAME="zjmf-lxd-server"
 INSTALL_DIR="/opt/zjmf-lxd-server"
 CONFIG_FILE="$INSTALL_DIR/config.yaml"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
+UPGRADE_MODE=false
 
 # 日志函数
 log_info() {
@@ -51,7 +52,74 @@ check_root() {
     fi
 }
 
-# 检查系统架构
+# 获取最新版本信息
+get_latest_version() {
+    log_info "获取最新版本信息..."
+    
+    # 从GitHub API获取最新release信息
+    local api_response
+    if ! api_response=$(curl -s "$GITHUB_API/releases/latest"); then
+        log_error "无法获取版本信息，请检查网络连接"
+        exit 1
+    fi
+    
+    # 解析版本号
+    VERSION=$(echo "$api_response" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+    
+    if [ -z "$VERSION" ]; then
+        log_error "无法解析版本信息"
+        exit 1
+    fi
+    
+    log_success "获取到最新版本: $VERSION"
+}
+
+# 检查当前安装版本
+check_current_version() {
+    if [ ! -f "$INSTALL_DIR/version" ]; then
+        log_info "未检测到当前版本信息"
+        return 1
+    fi
+    
+    local current_version=$(cat "$INSTALL_DIR/version")
+    log_info "当前已安装版本: $current_version"
+    
+    if [ "$current_version" = "$VERSION" ]; then
+        log_success "当前已是最新版本 $VERSION"
+        echo
+        log_prompt "是否要重新安装当前版本？(y/N): "
+        read -r reinstall_choice
+        case $reinstall_choice in
+            [Yy]|[Yy][Ee][Ss])
+                log_info "将重新安装当前版本"
+                UPGRADE_MODE=true
+                return 1
+                ;;
+            *)
+                log_info "取消安装"
+                exit 0
+                ;;
+        esac
+    else
+        log_warning "发现新版本可用: $current_version -> $VERSION"
+        echo
+        log_prompt "是否要升级到最新版本？(Y/n): "
+        read -r upgrade_choice
+        case $upgrade_choice in
+            [Nn]|[Nn][Oo])
+                log_info "取消升级"
+                exit 0
+                ;;
+            *)
+                log_info "将升级到版本 $VERSION"
+                UPGRADE_MODE=true
+                return 1
+                ;;
+        esac
+    fi
+    
+    return 0
+}
 detect_architecture() {
     local arch=$(uname -m)
     case $arch in
@@ -86,18 +154,84 @@ install_dependencies() {
     log_success "依赖包安装完成"
 }
 
-# 创建安装目录
-create_install_dir() {
-    log_info "创建安装目录..."
+# 备份现有配置
+backup_current_config() {
+    if [ "$UPGRADE_MODE" = true ] && [ -f "$CONFIG_FILE" ]; then
+        log_info "备份当前配置文件..."
+        cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+        log_success "配置文件已备份"
+        return 0
+    fi
+    return 1
+}
+
+# 恢复配置文件
+restore_config() {
+    local backup_file="$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
     
-    # 如果目录存在，备份旧版本
-    if [ -d "$INSTALL_DIR" ]; then
-        log_warning "检测到已存在的安装目录，创建备份..."
-        mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+    # 查找最新的备份文件
+    local latest_backup=$(ls -t "$CONFIG_FILE.backup."* 2>/dev/null | head -n1)
+    
+    if [ -n "$latest_backup" ] && [ -f "$latest_backup" ]; then
+        log_info "发现配置文件备份，是否恢复现有配置？"
+        echo
+        log_prompt "选择配置方式："
+        echo "1) 保留现有配置 (推荐升级时选择)"
+        echo "2) 重新配置IP和Hash"
+        echo -n "请选择 (1-2): "
+        read -r config_choice
+        
+        case $config_choice in
+            1)
+                cp "$latest_backup" "$CONFIG_FILE"
+                log_success "已恢复现有配置"
+                return 0
+                ;;
+            2)
+                log_info "将进行重新配置"
+                return 1
+                ;;
+            *)
+                log_warning "无效选择，将进行重新配置"
+                return 1
+                ;;
+        esac
     fi
     
-    mkdir -p "$INSTALL_DIR"
-    log_success "安装目录创建完成: $INSTALL_DIR"
+    return 1
+}
+
+# 停止现有服务
+stop_existing_service() {
+    if [ "$UPGRADE_MODE" = true ]; then
+        log_info "停止现有服务..."
+        if systemctl is-active --quiet "$SERVICE_NAME"; then
+            systemctl stop "$SERVICE_NAME"
+            log_success "服务已停止"
+        else
+            log_info "服务未在运行"
+        fi
+    fi
+}
+create_install_dir() {
+    log_info "准备安装目录..."
+    
+    # 如果是升级模式，只备份旧的二进制文件
+    if [ "$UPGRADE_MODE" = true ] && [ -d "$INSTALL_DIR" ]; then
+        log_info "升级模式：备份当前程序文件..."
+        if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+            cp "$INSTALL_DIR/$BINARY_NAME" "$INSTALL_DIR/${BINARY_NAME}.backup.$(date +%Y%m%d_%H%M%S)"
+        fi
+    elif [ -d "$INSTALL_DIR" ]; then
+        # 全新安装时备份整个目录
+        log_warning "检测到已存在的安装目录，创建完整备份..."
+        mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "$INSTALL_DIR"
+    else
+        mkdir -p "$INSTALL_DIR"
+    fi
+    
+    log_success "安装目录准备完成: $INSTALL_DIR"
 }
 
 # 下载并解压程序
@@ -130,11 +264,35 @@ download_and_extract() {
     # 设置执行权限
     chmod +x "$INSTALL_DIR/$BINARY_NAME"
     
-    log_success "程序文件解压完成"
+    # 记录版本信息
+    echo "$VERSION" > "$INSTALL_DIR/version"
+    
+    log_success "程序文件解压完成，版本: $VERSION"
 }
 
 # 获取用户输入的外网IP
 get_external_ip() {
+    # 在升级模式下，尝试从现有配置读取IP
+    if [ "$UPGRADE_MODE" = true ] && [ -f "$CONFIG_FILE" ]; then
+        local current_ip=$(grep -A 10 "server_ips:" "$CONFIG_FILE" | grep -v "localhost\|127.0.0.1" | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -n1 | sed 's/.*"\([^"]*\)".*/\1/')
+        if [ -n "$current_ip" ]; then
+            log_info "检测到当前配置的外网IP: $current_ip"
+            echo
+            log_prompt "是否使用当前IP地址？(Y/n): "
+            read -r use_current_ip
+            case $use_current_ip in
+                [Nn]|[Nn][Oo])
+                    # 继续输入新IP
+                    ;;
+                *)
+                    EXTERNAL_IP="$current_ip"
+                    log_success "使用当前外网IP: $EXTERNAL_IP"
+                    return
+                    ;;
+            esac
+        fi
+    fi
+    
     log_prompt "请输入您的外网IP地址："
     echo -n "外网IP: "
     read EXTERNAL_IP
@@ -163,6 +321,27 @@ generate_api_hash() {
 
 # 获取用户输入的API Hash
 get_api_hash() {
+    # 在升级模式下，尝试从现有配置读取Hash
+    if [ "$UPGRADE_MODE" = true ] && [ -f "$CONFIG_FILE" ]; then
+        local current_hash=$(grep "api_hash:" "$CONFIG_FILE" | sed 's/.*"\([^"]*\)".*/\1/')
+        if [ -n "$current_hash" ] && [[ $current_hash =~ ^[a-fA-F0-9]{64}$ ]]; then
+            log_info "检测到当前配置的API Hash"
+            echo
+            log_prompt "是否使用当前API Hash？(Y/n): "
+            read -r use_current_hash
+            case $use_current_hash in
+                [Nn]|[Nn][Oo])
+                    # 继续重新设置Hash
+                    ;;
+                *)
+                    API_HASH="$current_hash"
+                    log_success "使用当前API Hash"
+                    return
+                    ;;
+            esac
+        fi
+    fi
+    
     echo
     log_prompt "请选择API Hash配置方式："
     echo "1) 自动生成64位API Hash (推荐)"
@@ -304,6 +483,7 @@ show_service_info() {
     echo -e "  服务端口: ${GREEN}8080${NC}"
     echo -e "  外网IP:   ${GREEN}$EXTERNAL_IP${NC}"
     echo -e "  API Hash: ${GREEN}$API_HASH${NC}"
+    echo -e "  安装模式: ${GREEN}$([ "$UPGRADE_MODE" = true ] && echo "升级安装" || echo "全新安装")${NC}"
     echo
     log_info "常用命令:"
     echo -e "  查看服务状态: ${CYAN}systemctl status $SERVICE_NAME${NC}"
@@ -311,6 +491,7 @@ show_service_info() {
     echo -e "  重启服务:     ${CYAN}systemctl restart $SERVICE_NAME${NC}"
     echo -e "  停止服务:     ${CYAN}systemctl stop $SERVICE_NAME${NC}"
     echo -e "  禁用自启:     ${CYAN}systemctl disable $SERVICE_NAME${NC}"
+    echo -e "  升级版本:     ${CYAN}sudo $0${NC} (重新运行此脚本)"
     echo
     log_info "访问地址:"
     echo -e "  本地访问: ${GREEN}https://localhost:8080${NC}"
@@ -334,13 +515,21 @@ cleanup() {
 # 主函数
 main() {
     echo -e "${BLUE}============================================${NC}"
-    echo -e "${BLUE}      ZJMF LXD Server 一键安装脚本${NC}"
-    echo -e "${BLUE}              版本: $VERSION${NC}"
+    echo -e "${BLUE}      ZJMF LXD Server 安装/升级脚本${NC}"
     echo -e "${BLUE}============================================${NC}"
     echo
     
     # 检查权限
     check_root
+    
+    # 获取最新版本
+    get_latest_version
+    
+    # 检查当前版本（如果已安装）
+    if check_current_version; then
+        log_success "无需更新"
+        exit 0
+    fi
     
     # 检测架构
     detect_architecture
@@ -348,9 +537,11 @@ main() {
     # 安装依赖
     install_dependencies
     
-    # 获取用户输入
-    get_external_ip
-    get_api_hash
+    # 备份配置（升级模式）
+    backup_current_config
+    
+    # 停止现有服务（升级模式）
+    stop_existing_service
     
     # 创建安装目录
     create_install_dir
@@ -358,8 +549,14 @@ main() {
     # 下载和解压
     download_and_extract
     
-    # 创建配置文件
-    create_config
+    # 尝试恢复配置或重新配置
+    if ! restore_config; then
+        # 获取用户输入
+        get_external_ip
+        get_api_hash
+        # 创建配置文件
+        create_config
+    fi
     
     # 创建systemd服务
     create_systemd_service
@@ -371,7 +568,7 @@ main() {
     show_service_info
     
     echo
-    log_success "安装脚本执行完成!"
+    log_success "$([ "$UPGRADE_MODE" = true ] && echo "升级" || echo "安装")脚本执行完成!"
 }
 
 # 错误处理
