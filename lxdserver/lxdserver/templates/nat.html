@@ -1,0 +1,633 @@
+<style>
+.resource-card { transition: transform 0.2s ease-in-out; }
+.resource-card:hover { transform: translateY(-2px); }
+.filter-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; z-index: 1000; max-height: 200px; overflow-y: auto; display: none; }
+.filter-list li { list-style: none; padding: 8px 12px; cursor: pointer; }
+.filter-list li:hover { background-color: #f8f9fa; }
+.filter-selected { background-color: #007bff !important; color: white !important; }
+.filter-text { position: relative; cursor: pointer; }
+.icon-filter-arrow:after { content: "▼"; font-size: 12px; color: #666; }
+.filter-show:after { content: "▲"; }
+.selectItem { position: relative; }
+</style>
+
+<!-- NAT端口转发管理 -->
+<div class="container-fluid" id="natManager">
+    <!-- 页面标题和操作按钮 -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="m-0 font-weight-bold text-primary">NAT端口转发管理</h6>
+                    <small class="text-muted">管理容器端口转发规则</small>
+                    <div class="mt-2">
+                        <span class="badge badge-info">
+                            最后更新: <span id="last-update">刚刚</span>
+                        </span>
+                        <span class="badge badge-secondary ml-2">
+                            已使用: <span id="current-count">{$current_count|default=0}</span>/{$nat_limit|default=5} 条规则
+                        </span>
+                        <span class="badge badge-success ml-1">
+                            剩余: <span id="remaining-count">{$remaining_count|default=5}</span> 条
+                        </span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#addModallxdserveracl" id="add-nat-btn">
+                        <i class="fas fa-plus mr-1"></i>创建转发
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshNATPage()">
+                        <i class="fas fa-sync-alt mr-1"></i>刷新
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <!-- 空状态：默认隐藏，AJAX 拉到空列表时显示 -->
+            <div id="nat-empty-state" class="text-center py-5" style="display:none">
+                <i class="fas fa-network-wired fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">暂无转发规则</h5>
+                <p class="text-muted mb-3">创建第一个端口转发规则来开始使用</p>
+                <button class="btn btn-primary" data-toggle="modal" data-target="#addModallxdserveracl">
+                    <i class="fas fa-plus mr-1"></i>创建转发规则
+                </button>
+            </div>
+
+            <!-- 规则表格：默认显示，由JS填充内容 -->
+            <div id="nat-list-container" class="table-responsive" style="display:block">
+                <table class="table table-hover mb-0" style="width:100%">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width:20%"><i class="fas fa-globe mr-1"></i>外网端口</th>
+                            <th style="width:20%"><i class="fas fa-server mr-1"></i>内网端口</th>
+                            <th style="width:20%"><i class="fas fa-network-wired mr-1"></i>协议类型</th>
+                            <th style="width:20%"><i class="fas fa-signal mr-1"></i>状态</th>
+                            <th style="width:20%"><i class="fas fa-cogs mr-1"></i>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="nat-tbody">
+                        <tr><td colspan="5" class="text-center text-muted">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建NAT转发模态框 -->
+    <div class="modal fade" id="addModallxdserveracl" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus-circle text-primary mr-2"></i>创建NAT转发规则
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" onclick="closeAddModal()">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="addNatForm">
+                        <div class="form-group">
+                            <label for="sportinput">
+                                <i class="fas fa-server mr-1"></i>内网端口
+                            </label>
+                            <input required name="sport" type="number" class="form-control" min="1" max="65535"
+                                   id="sportinput" placeholder="请输入内部端口(1-65535)">
+                            <div class="invalid-feedback" id="internalPort-feedbacklxdserveracl"></div>
+                            <small class="form-text text-muted">容器内部服务监听的端口</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-globe mr-1"></i>外网端口
+                            </label>
+                            <input name="dport" type="hidden" id="dportinput" value="">
+                            <input type="text" class="form-control" value="系统自动分配" disabled>
+                            <div class="text-muted small mt-1">系统将自动分配可用的外网端口（10000-65535），不可手动指定。</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nokvmprotocollxdserveracl">
+                                <i class="fas fa-network-wired mr-1"></i>协议类型
+                            </label>
+
+                            <div class="selectItem">
+                                <div class="protocol nokvmprotocollxdserveracl">
+                                    <div class="filter-text">
+                                        <input class="filter-title" type="text" readonly placeholder="TCP" />
+                                        <i class="icon icon-filter-arrow"></i>
+                                    </div>
+                                    <select name="dtype">
+                                        <option value="tcp" selected>TCP</option>
+                                        <option value="udp">UDP</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <small class="form-text text-muted">TCP适用于HTTP/HTTPS等，UDP适用于DNS等</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal" onclick="closeAddModal()">
+                        <i class="fas fa-times mr-1"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-primary confirm-btnlxdserveracl">
+                        <i class="fas fa-check mr-1"></i>确认创建
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用说明 -->
+    <div class="card shadow mt-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-question-circle mr-2"></i>使用说明
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-server text-primary mr-2"></i><strong>内网端口:</strong> 容器内部服务端口</li>
+                        <li class="mb-2"><i class="fas fa-globe text-success mr-2"></i><strong>外网端口:</strong> 外部访问端口</li>
+                        <li class="mb-2"><i class="fas fa-network-wired text-info mr-2"></i><strong>协议类型:</strong> TCP/UDP协议</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-link text-warning mr-2"></i>通过 <code>服务器IP:外网端口</code> 访问服务</li>
+                        <li class="mb-2"><i class="fas fa-trash text-danger mr-2"></i>删除规则将立即停止端口转发</li>
+                        <li class="mb-2"><i class="fas fa-broom text-secondary mr-2"></i>建议定期清理不需要的规则</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+; jQuery.fn.selectFilter = function (options) {
+	var defaults = {
+		callBack: function (res) { }
+	};
+	var ops = $.extend({}, defaults, options);
+	var selectList = $(this).find('select option');
+	var that = this;
+	var html = '';
+
+	html += '<ul class="filter-list">';
+
+	$(selectList).each(function (idx, item) {
+		var val = $(item).val();
+		var valText = $(item).html();
+		var selected = $(item).attr('selected');
+		var disabled = $(item).attr('disabled');
+		var isSelected = selected ? 'filter-selected' : '';
+		var isDisabled = disabled ? 'filter-disabled' : '';
+		if (selected) {
+			html += '<li class="' + isSelected + '" data-value="' + val + '"><a title="' + valText + '">' + valText + '</a></li>';
+			$(that).find('.filter-title').val(valText);
+		} else if (disabled) {
+			html += '<li class="' + isDisabled + '" data-value="' + val + '"><a>' + valText + '</a></li>';
+		} else {
+			html += '<li data-value="' + val + '"><a title="' + valText + '">' + valText + '</a></li>';
+		};
+	});
+
+	html += '</ul>';
+	$(that).append(html);
+	$(that).find('select').hide();
+
+	$(that).on('click', '.filter-text', function () {
+		$(that).find('.filter-list').slideToggle(100);
+		$(that).find('.filter-list').toggleClass('filter-open');
+		$(that).find('.icon-filter-arrow').toggleClass('filter-show');
+	});
+
+	$(that).find('.filter-list li').not('.filter-disabled').on('click', function () {
+		var val = $(this).data('value');
+		var valText = $(this).find('a').html();
+		$(that).find('.filter-title').val(valText);
+		$(that).find('.icon-filter-arrow').toggleClass('filter-show');
+		$(this).addClass('filter-selected').siblings().removeClass('filter-selected');
+		$(this).parent().slideToggle(50);
+		for (var i = 0; i < selectList.length; i++) {
+			var selectVal = selectList.eq(i).val();
+			if (val == selectVal) {
+				$(that).find('select').val(val);
+			};
+		};
+		ops.callBack(val);
+	});
+
+	$(document).on('mousedown', function (e) {
+		closeSelect(that, e);
+	});
+	$(document).on('touchstart', function (e) {
+		closeSelect(that, e);
+	});
+
+	function closeSelect (that, e) {
+		var filter = $(that).find('.filter-list'),
+			filterEl = $(that).find('.filter-list')[0];
+		var filterBoxEl = $(that)[0];
+		var target = e.target;
+		if (filterEl !== target && !$.contains(filterEl, target) && !$.contains(filterBoxEl, target)) {
+			filter.slideUp(50);
+			$(that).find('.filter-list').removeClass('filter-open');
+			$(that).find('.icon-filter-arrow').removeClass('filter-show');
+		};
+	}
+};
+</script>
+<script>
+// NAT调试模式开关
+const NAT_DEBUG_MODE = false;
+
+function natDebug(message, data) {
+    if (NAT_DEBUG_MODE) {
+        console.log('[NAT-DEBUG]', message, data);
+    }
+}
+
+var dportval, sportval, dtypeval;
+var currentContainerId = '';
+var MODULE_API_URL = "{$MODULE_CUSTOM_API}";
+var currentContainerName = '';
+var natLimit = {$nat_limit|default=5};
+var currentCount = {$current_count|default=0};
+
+$(document).ready(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const containerId = urlParams.get('id');
+
+    if (!containerId) {
+        debug('无法从URL获取容器ID');
+        return;
+    }
+
+    currentContainerId = containerId;
+    natDebug('设置容器ID', containerId);
+
+    getContainerInfo(containerId);
+    updateLastUpdateTime();
+    fetchNATList();
+
+    // 每10秒自动刷新
+    setInterval(fetchNATList, 10000);
+});
+
+function refreshNATRules() {
+    fetchNATList();
+}
+
+window.refreshNATRules = refreshNATRules;
+window.refreshNATPage = refreshNATRules;
+
+function updateLastUpdateTime() {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('zh-CN', {
+        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const lastUpdateElement = document.getElementById('last-update');
+    if (lastUpdateElement) {
+        lastUpdateElement.textContent = timeString;
+    }
+}
+
+function getContainerInfo(containerId) {
+    if (!containerId) return;
+    const timestamp = new Date().getTime();
+    const infoUrl = `/provision/custom/content?id=${containerId}&key=info&action=getinfoall&_t=${timestamp}`;
+
+    ajax({
+        type: "get",
+        url: infoUrl,
+        success: function(response) {
+            if (response && response.code === 200 && response.data && response.data.hostname) {
+                currentContainerName = response.data.hostname;
+            }
+        },
+        error: function(status, error) {
+            natDebug('获取容器信息失败', error);
+        }
+    });
+}
+
+function fetchNATList() {
+    if (!currentContainerId) return;
+    const timestamp = new Date().getTime();
+    const natlistUrl = `/provision/custom/content?id=${currentContainerId}&key=nat_acl&action=natlist&_t=${timestamp}`;
+
+    $.ajax({
+        url: natlistUrl,
+        method: 'GET',
+        dataType: 'json',
+        timeout: 10000,
+        cache: false,
+        success: function(resp) {
+            natDebug('NAT列表响应', resp);
+            if (resp && resp.data && Array.isArray(resp.data)) {
+                const list = resp.data;
+                const $empty = $('#nat-empty-state');
+                const $listContainer = $('#nat-list-container');
+                const $tbody = $('#nat-tbody');
+
+                if (list.length === 0) {
+                    $empty.show();
+                    $listContainer.hide();
+                } else {
+                    $empty.hide();
+                    $listContainer.show();
+
+                    let html = '';
+                    list.forEach(function(item) {
+                        const dport = item.external_port || item.dport || '';
+                        const sport = item.internal_port || item.sport || '';
+                        const dtype = (item.protocol || item.dtype || '').toLowerCase();
+                        const status = (item.status || 'active').toLowerCase();
+
+                        const dtypeBadge = dtype === 'udp' ? '<span class="badge badge-info">UDP</span>' : '<span class="badge badge-success">TCP</span>';
+                        const statusBadge = status === 'active'
+                            ? '<span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>活跃</span>'
+                            : '<span class="badge badge-secondary"><i class="fas fa-pause-circle mr-1"></i>停用</span>';
+                        html += '<tr>' +
+                                '<td><span class="badge badge-primary">' + dport + '</span></td>' +
+                                '<td><span class="font-weight-bold">' + sport + '</span></td>' +
+                                '<td>' + dtypeBadge + '</td>' +
+                                '<td>' + statusBadge + '</td>' +
+                                '<td><button class="btn btn-danger btn-sm deleteNATlxdserveracl" data-dport="' + dport + '" data-sport="' + sport + '" data-dtype="' + dtype + '"><i class="fas fa-trash mr-1"></i>删除</button></td>' +
+                                '</tr>';
+                    });
+                    $tbody.html(html);
+
+                    // 更新计数器和按钮状态
+                    // 直接使用NAT规则总数（SSH端口不在此列表中）
+                    updateNATCounters(list.length);
+                }
+                updateLastUpdateTime();
+            }
+        },
+        error: function() {
+            updateLastUpdateTime();
+        }
+    });
+}
+
+function updateNATCounters(count) {
+    currentCount = count;
+    const remainingCount = Math.max(0, natLimit - count);
+
+    // 更新显示
+    $('#current-count').text(count);
+    $('#remaining-count').text(remainingCount);
+
+    // 更新按钮状态
+    const $addBtn = $('#add-nat-btn');
+    if (count >= natLimit) {
+        $addBtn.prop('disabled', true);
+        $addBtn.html('<i class="fas fa-ban mr-1"></i>已达限制');
+        $addBtn.removeClass('btn-primary').addClass('btn-secondary');
+        $addBtn.attr('title', `NAT规则数量已达到限制（${natLimit}条）`);
+    } else {
+        $addBtn.prop('disabled', false);
+        $addBtn.html('<i class="fas fa-plus mr-1"></i>创建转发');
+        $addBtn.removeClass('btn-secondary').addClass('btn-primary');
+        $addBtn.attr('title', '');
+    }
+}
+
+  $('.nokvmprotocollxdserveracl').selectFilter({
+    callBack: function (val) {
+    }
+  });
+  // 移除递归的 window.checkFormlxdserveracl 包装，改为直接在点击处理器中做校验与提交
+
+  function closeAddModal() {
+    const dportInput = document.getElementById("dportinput");
+    const sportInput = document.getElementById("sportinput");
+
+    if (dportInput) dportInput.classList.remove("is-valid", "is-invalid");
+    if (sportInput) sportInput.classList.remove("is-valid", "is-invalid");
+
+    const extFeedback = document.getElementById("externalPort-feedbacklxdserveracl");
+    const intFeedback = document.getElementById("internalPort-feedbacklxdserveracl");
+    if (extFeedback) extFeedback.innerHTML = "";
+    if (intFeedback) intFeedback.innerHTML = "";
+
+    const formEl = $("#addModallxdserveracl").find("form")[0];
+    if (formEl) formEl.reset();
+    var $selectProtocol = $('.nokvmprotocollxdserveracl');
+    var $options = $selectProtocol.find('select option');
+    var defaultText = 'TCP';
+    var defaultValue = 'tcp';
+     if ($options.filter('[selected]').length) {
+        defaultText = $options.filter('[selected]').text();
+        defaultValue = $options.filter('[selected]').val();
+    } else if ($options.length) {
+        defaultText = $options.first().text();
+        defaultValue = $options.first().val();
+    }
+    $selectProtocol.find('.filter-title').val(defaultText);
+    $selectProtocol.find('select').val(defaultValue);
+    $selectProtocol.find('.filter-list li').removeClass('filter-selected');
+    $selectProtocol.find('.filter-list li[data-value="' + defaultValue + '"]').addClass('filter-selected');
+  }
+
+  window.edit = function (val){
+        var value = $(val).closest("tr").find("td");
+        dportval = value.eq(0).text();
+        sportval = value.eq(1).text();
+        dtypeval = value.eq(2).text().toLowerCase();
+  }
+
+$(document).on('click', '.deleteNATlxdserveracl', function (e) {
+    e.preventDefault();
+    if ($(this).data('disabled') == 'true') return;
+
+    var delete_nat_btn = $(this);
+    edit(this);
+
+    Swal.fire({
+        icon: 'warning',
+        title: '删除转发规则',
+        html: '<div class="text-muted">外网端口: <span class="badge badge-primary">' + dportval + '</span> · 内网端口: <span class="font-weight-bold">' + sportval + '</span> · 协议: <span class="text-uppercase font-weight-bold">' + dtypeval + '</span></div>',
+        showCancelButton: true,
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'swal2-bootstrap-card',
+            confirmButton: 'btn btn-danger',
+            cancelButton: 'btn btn-secondary'
+        },
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        var dd = delete_nat_btn.data('dport');
+        var ss = delete_nat_btn.data('sport');
+        var tt = delete_nat_btn.data('dtype');
+        if (dd) dportval = dd;
+        if (ss) sportval = ss;
+        if (tt) dtypeval = tt;
+
+        if (result.value) {
+            delete_nat_btn.data('orig-html', delete_nat_btn.html());
+            delete_nat_btn.html('<i class="fas fa-circle-notch fa-spin"></i>');
+            delete_nat_btn.data('disabled', 'true');
+
+            ajax({
+                type: 'post',
+                url: MODULE_API_URL,
+                data: { func: 'natdel', dtype: dtypeval, dport: dportval, sport: sportval },
+                success: function (data) {
+                    delete_nat_btn.html(delete_nat_btn.data('orig-html') || '删除');
+                    delete_nat_btn.data('disabled', 'false');
+                    fetchNATList();
+                },
+                error: function (xhrStatus, errorData) {
+                    delete_nat_btn.html(delete_nat_btn.data('orig-html') || '删除');
+                    delete_nat_btn.data('disabled', 'false');
+                    natDebug('删除请求失败', errorData);
+                    fetchNATList();
+                }
+            });
+        }
+    });
+});
+
+$('.confirm-btnlxdserveracl').on('click', function () {
+    if (!window.currentContainerName) {
+        Swal.fire({
+            icon: 'error',
+            title: '容器信息未加载',
+            text: '请等待容器信息加载完成后再试'
+        });
+        return;
+    }
+
+    // 检查NAT规则数量限制
+    if (currentCount >= natLimit) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'NAT规则数量已达限制',
+            text: `您的容器最多只能创建 ${natLimit} 条NAT转发规则（不包括SSH端口）`,
+            confirmButtonText: '我知道了'
+        });
+        return;
+    }
+
+    const internalPort = document.getElementById('sportinput');
+    const internalPortFeedback = document.getElementById('internalPort-feedbacklxdserveracl');
+
+    // 校验内网端口
+    const sportVal = parseInt(internalPort && internalPort.value ? internalPort.value : '');
+    if (!sportVal || sportVal < 1 || sportVal > 65535) {
+        if (internalPortFeedback) internalPortFeedback.innerHTML = '请填写有效的内网端口 (1-65535)';
+        if (internalPort) {
+            internalPort.classList.add('is-invalid');
+        }
+        return;
+    } else {
+        if (internalPort) internalPort.classList.remove('is-invalid');
+        if (internalPortFeedback) internalPortFeedback.innerHTML = '';
+    }
+
+    // 校验协议
+    const dtypeSelect = document.querySelector("select[name='dtype']");
+    const dtypeVal = dtypeSelect ? dtypeSelect.value : '';
+    if (!dtypeVal || (dtypeVal !== 'tcp' && dtypeVal !== 'udp')) {
+        Swal.fire({
+            icon: 'error',
+            title: '协议类型无效',
+            text: '请选择有效的协议类型（TCP或UDP）'
+        });
+        return;
+    }
+
+    if (!$(this).data('submit')) {
+        var current_button = $(this);
+        current_button.data('orig-html', current_button.html());
+        current_button.html('<i class="fas fa-circle-notch fa-spin"></i>');
+        current_button.data('submit', 'submit');
+
+        ajax({
+            type: 'post',
+            url: MODULE_API_URL,
+            data: $('#addModallxdserveracl').find('form').serialize() + '&func=natadd',
+            success: function (data) {
+                current_button.html(current_button.data('orig-html') || '确认');
+                current_button.data('submit', '');
+
+                if (data.status == 'success' || data.msg === 'NAT规则(iptables)添加成功') {
+                    $('#addModallxdserveracl').modal('hide');
+                    closeAddModal();
+                    fetchNATList();
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '创建失败',
+                        text: data.msg || '操作失败'
+                    });
+                }
+            },
+            error: function (xhrStatus, errorData) {
+                current_button.html(current_button.data('orig-html') || '确认');
+                current_button.data('submit', '');
+                Swal.fire({
+                    icon: 'error',
+                    title: '创建失败',
+                    text: '网络或服务器错误'
+                });
+            }
+        });
+    }
+});
+function ajax(options) {
+    var xhr = new XMLHttpRequest() || new ActiveXObject("Microsoft,XMLHTTP");
+    var str = "";
+
+    if (typeof options.data != 'string') {
+        for (var key in options.data) {
+            str += "&" + key + "=" + options.data[key];
+        }
+        str = str.slice(1);
+    } else {
+        str = options.data;
+    }
+
+    if (options.type == "get") {
+        xhr.open("get", options.url + "?" + str);
+        xhr.setRequestHeader("Authorization", "JWT {$Think.get.jwt}");
+        xhr.send();
+    } else if (options.type == "post") {
+        xhr.open("post", options.url);
+        xhr.setRequestHeader("content-type", "application/x-www-form-urlencoded");
+        xhr.setRequestHeader("Authorization", "JWT {$Think.get.jwt}");
+        xhr.send(str);
+    }
+
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState == 4 && xhr.status == 200) {
+            try {
+                var d = JSON.parse(xhr.responseText);
+                options.success && options.success(d, xhr.responseXML);
+            } catch (e) {
+                natDebug('JSON解析错误', xhr.responseText);
+                options.error && options.error(xhr.status, 'JSON解析错误');
+            }
+        } else if (xhr.readyState == 4 && xhr.status != 200) {
+            try {
+                var parsedErrorData = JSON.parse(xhr.responseText);
+                options.error && options.error(xhr.status, parsedErrorData);
+            } catch (e) {
+                options.error && options.error(xhr.status, xhr.responseText);
+            }
+        }
+    };
+}
+</script>
