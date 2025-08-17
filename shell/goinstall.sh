@@ -14,13 +14,13 @@ NC='\033[0m' # No Color
 
 # 配置变量
 GITHUB_REPO="https://github.com/xkatld/zjmf-lxd-server"
-GITHUB_API="https://api.github.com/repos/xkatld/zjmf-lxd-server"
-VERSION=""  # 将动态获取
+VERSION="v0.0.2"  # 默认版本
 SERVICE_NAME="zjmf-lxd-server"
 INSTALL_DIR="/opt/zjmf-lxd-server"
 CONFIG_FILE="$INSTALL_DIR/config.yaml"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 UPGRADE_MODE=false
+FORCE_INSTALL=false
 
 # 日志函数
 log_info() {
@@ -52,25 +52,73 @@ check_root() {
     fi
 }
 
-# 获取最新版本信息
-get_latest_version() {
-    log_info "获取最新版本信息..."
-    
-    # 尝试获取最新版本，失败则使用默认版本
-    VERSION=$(curl -s "https://api.github.com/repos/xkatld/zjmf-lxd-server/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 2>/dev/null)
-    
-    if [ -z "$VERSION" ]; then
-        VERSION="v0.0.2"
-        log_warning "无法获取最新版本，使用默认版本: $VERSION"
-    else
-        log_success "获取到最新版本: $VERSION"
-    fi
+# 显示使用帮助
+show_usage() {
+    echo -e "${BLUE}用法:${NC}"
+    echo "  $0 [选项]"
+    echo
+    echo -e "${BLUE}选项:${NC}"
+    echo "  -v, --version VERSION    指定安装版本 (如: v0.0.2, 0.0.3)"
+    echo "  -f, --force             强制覆盖安装，不询问确认"
+    echo "  -h, --help              显示此帮助信息"
+    echo
+    echo -e "${BLUE}示例:${NC}"
+    echo "  $0                      # 使用默认版本安装"
+    echo "  $0 -v v0.0.3           # 安装指定版本"
+    echo "  $0 -v 0.0.2 -f         # 强制安装指定版本"
+    echo "  $0 --version v0.0.4 --force  # 完整参数格式"
 }
 
-# 检查当前安装版本
+# 解析命令行参数
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -v|--version)
+                if [[ -z "$2" ]]; then
+                    log_error "版本参数不能为空"
+                    show_usage
+                    exit 1
+                fi
+                # 自动添加v前缀（如果没有的话）
+                if [[ "$2" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+                    VERSION="v$2"
+                else
+                    VERSION="$2"
+                fi
+                shift 2
+                ;;
+            -f|--force)
+                FORCE_INSTALL=true
+                shift
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                log_error "未知参数: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    log_info "使用版本: $VERSION"
+    if [ "$FORCE_INSTALL" = true ]; then
+        log_info "强制安装模式已启用"
+    fi
+}
 check_current_version() {
+    # 强制安装模式直接跳过版本检查
+    if [ "$FORCE_INSTALL" = true ]; then
+        if [ -d "$INSTALL_DIR" ]; then
+            log_info "强制安装模式：将覆盖现有安装"
+            UPGRADE_MODE=true
+        fi
+        return 1
+    fi
+    
     if [ ! -f "$INSTALL_DIR/version" ]; then
-        log_info "未检测到当前版本信息"
         return 1
     fi
     
@@ -78,9 +126,8 @@ check_current_version() {
     log_info "当前已安装版本: $current_version"
     
     if [ "$current_version" = "$VERSION" ]; then
-        log_success "当前已是最新版本 $VERSION"
         echo
-        log_prompt "是否要重新安装当前版本？(y/N): "
+        log_prompt "检测到相同版本已安装，是否要重新安装？(y/N): "
         read -r reinstall_choice
         case $reinstall_choice in
             [Yy]|[Yy][Ee][Ss])
@@ -94,21 +141,9 @@ check_current_version() {
                 ;;
         esac
     else
-        log_warning "发现新版本可用: $current_version -> $VERSION"
-        echo
-        log_prompt "是否要升级到最新版本？(Y/n): "
-        read -r upgrade_choice
-        case $upgrade_choice in
-            [Nn]|[Nn][Oo])
-                log_info "取消升级"
-                exit 0
-                ;;
-            *)
-                log_info "将升级到版本 $VERSION"
-                UPGRADE_MODE=true
-                return 1
-                ;;
-        esac
+        log_info "将从 $current_version 升级到 $VERSION"
+        UPGRADE_MODE=true
+        return 1
     fi
     
     return 0
@@ -509,14 +544,12 @@ cleanup() {
 main() {
     echo -e "${BLUE}============================================${NC}"
     echo -e "${BLUE}      ZJMF LXD Server 安装/升级脚本${NC}"
+    echo -e "${BLUE}              版本: $VERSION${NC}"
     echo -e "${BLUE}============================================${NC}"
     echo
     
     # 检查权限
     check_root
-    
-    # 获取最新版本
-    get_latest_version
     
     # 检查当前版本（如果已安装）
     if check_current_version; then
@@ -544,11 +577,19 @@ main() {
     
     # 尝试恢复配置或重新配置
     if ! restore_config; then
-        # 获取用户输入
-        get_external_ip
-        get_api_hash
-        # 创建配置文件
-        create_config
+        # 强制模式下跳过交互配置
+        if [ "$FORCE_INSTALL" = true ]; then
+            log_warning "强制安装模式：使用默认配置"
+            EXTERNAL_IP="127.0.0.1"
+            generate_api_hash
+            create_config
+        else
+            # 获取用户输入
+            get_external_ip
+            get_api_hash
+            # 创建配置文件
+            create_config
+        fi
     fi
     
     # 创建systemd服务
