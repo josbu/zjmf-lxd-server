@@ -23,7 +23,7 @@ function lxdserver_MetaData()
 {
     return [
         'DisplayName' => '魔方财务-LXD对接插件 by xkatld',
-        'APIVersion'  => '1.0.1',
+        'APIVersion'  => '0.0.2',
         'HelpDoc'     => 'https://github.com/xkatld/zjmf-lxd-server',
     ];
 }
@@ -88,9 +88,16 @@ function lxdserver_ConfigOptions()
         [
             'type'        => 'text',
             'name'        => 'NAT规则数量限制',
-            'description' => '单个容器允许的最大NAT转发规则数量（不包括SSH端口）',
+            'description' => '最大NAT转发规则数量',
             'default'     => '5',
             'key'         => 'nat_limit',
+        ],
+        [
+            'type'        => 'text',
+            'name'        => '月流量限制',
+            'description' => '每月同日期重置',
+            'default'     => '100',
+            'key'         => 'traffic_limit',
         ],
     ];
 }
@@ -218,7 +225,7 @@ function lxdserver_ClientAreaOutput($params, $key)
         } elseif (!is_array($res)) {
             $res = ['code' => 500, 'msg' => '服务器返回了无效的响应格式'];
         } else {
-            $res = lxdserver_TransformAPIResponse($action, $res);
+            $res = lxdserver_TransformAPIResponse($action, $res, $params);
         }
 
         // 返回JSON响应
@@ -412,6 +419,48 @@ function lxdserver_Reboot($params)
         return ['status' => 'success', 'msg' => $res['msg'] ?? '重启成功'];
     } else {
         return ['status' => 'error', 'msg' => $res['msg'] ?? '重启失败'];
+    }
+}
+
+// 暂停容器
+function lxdserver_SuspendAccount($params)
+{
+    lxdserver_debug('开始暂停容器', ['domain' => $params['domain']]);
+
+    $data = [
+        'url'  => '/api/suspend?hostname=' . $params['domain'],
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    lxdserver_debug('暂停容器响应', $res);
+
+    if (isset($res['code']) && $res['code'] == '200') {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? '容器暂停任务已提交'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '容器暂停失败'];
+    }
+}
+
+// 解除暂停容器
+function lxdserver_UnsuspendAccount($params)
+{
+    lxdserver_debug('开始解除暂停容器', ['domain' => $params['domain']]);
+
+    $data = [
+        'url'  => '/api/unsuspend?hostname=' . $params['domain'],
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    lxdserver_debug('解除暂停容器响应', $res);
+
+    if (isset($res['code']) && $res['code'] == '200') {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? '容器恢复任务已提交'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '容器恢复失败'];
     }
 }
 
@@ -732,7 +781,7 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
 }
 
 // API响应格式转换
-function lxdserver_TransformAPIResponse($action, $response)
+function lxdserver_TransformAPIResponse($action, $response, $params = null)
 {
     if (!isset($response['code']) || $response['code'] != 200) {
         return $response; // 错误响应直接返回
@@ -788,11 +837,33 @@ function lxdserver_TransformAPIResponse($action, $response)
                         'memory_percent' => $data['usage_percent']['memory_percent'] ?? 0,
                         'disk_percent' => $data['usage_percent']['disk_percent'] ?? 0,
 
+                        // 流量限制信息
+                        'traffic_limit_gb' => 0,
+                        'traffic_limit_display' => '不限制',
+                        'traffic_percent' => 0,
+
                         // 添加时间戳用于调试
                         'last_update' => date('Y-m-d H:i:s'),
                         'timestamp' => time(),
                     ]
                 ];
+
+                // 添加流量限制信息
+                if ($params && isset($params['configoptions']['traffic_limit'])) {
+                    $trafficLimitGB = intval($params['configoptions']['traffic_limit']);
+                    $trafficUsageRaw = $data['usage']['traffic_usage_raw'] ?? 0;
+                    $trafficUsageGB = $trafficUsageRaw / (1024 * 1024 * 1024);
+
+                    $transformed['data']['traffic_limit_gb'] = $trafficLimitGB;
+
+                    if ($trafficLimitGB > 0) {
+                        $transformed['data']['traffic_limit_display'] = $trafficLimitGB . ' GB';
+                        $transformed['data']['traffic_percent'] = min(100, ($trafficUsageGB / $trafficLimitGB) * 100);
+                    } else {
+                        $transformed['data']['traffic_limit_display'] = '不限制';
+                        $transformed['data']['traffic_percent'] = 0;
+                    }
+                }
 
                 return $transformed;
             }
@@ -868,8 +939,8 @@ function lxdserver_vnc($params) {
         return ['status' => 'error', 'msg' => $tokenRes['msg'] ?? '生成控制台令牌失败'];
     }
 
-    // 构建控制台URL
-    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+    // 构建控制台URL（强制使用HTTPS）
+    $protocol = 'https';
     $consoleUrl = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . '/console?token=' . $tokenRes['data']['token'];
 
     lxdserver_debug('VNC控制台URL生成', ['url' => $consoleUrl]);
@@ -879,4 +950,41 @@ function lxdserver_vnc($params) {
         'url' => $consoleUrl,
         'msg' => '控制台连接已准备就绪'
     ];
+}
+
+// 后台自定义按钮定义
+function lxdserver_AdminButton($params)
+{
+    // 只有容器已开通时才显示自定义按钮
+    if (!empty($params['domain'])) {
+        return [
+            'TrafficReset' => '流量重置',
+        ];
+    }
+    return [];
+}
+
+// 流量重置自定义按钮处理函数
+function lxdserver_TrafficReset($params)
+{
+    lxdserver_debug('流量重置请求', ['domain' => $params['domain']]);
+
+    if (empty($params['domain'])) {
+        return ['status' => 'error', 'msg' => '容器域名参数缺失'];
+    }
+
+    $data = [
+        'url'  => '/api/traffic/reset?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'POST');
+    lxdserver_debug('流量重置API响应', $res);
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? '流量统计已重置'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '流量重置失败'];
+    }
 }

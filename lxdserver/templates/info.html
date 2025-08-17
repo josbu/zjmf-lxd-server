@@ -235,8 +235,22 @@ function updateAllInfo(data) {
 
     // 更新流量信息
     const trafficUsage = data.traffic_usage || 'N/A';
-    $('#traffic-info').text(`累计: ${trafficUsage}`);
-    $('#traffic-progress').css('width', '10%');
+    const trafficLimit = data.traffic_limit_display || '不限制';
+    const trafficPercent = parseFloat(data.traffic_percent) || 0;
+
+    $('#traffic-info').text(`${trafficUsage} / ${trafficLimit}`);
+    $('#traffic-progress').css('width', Math.min(trafficPercent, 100) + '%');
+
+    // 根据使用率调整进度条颜色
+    const progressBar = $('#traffic-progress');
+    progressBar.removeClass('bg-warning bg-danger bg-success');
+    if (trafficPercent >= 90) {
+        progressBar.addClass('bg-danger');
+    } else if (trafficPercent >= 80) {
+        progressBar.addClass('bg-warning');
+    } else {
+        progressBar.addClass('bg-success');
+    }
 
     // 更新时间
     if (data.last_update) {
