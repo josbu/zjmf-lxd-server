@@ -1,5 +1,4 @@
 #!/bin/bash
-# ZJMF LXD Server 安装/升级脚本（保留数据库、交互配置）
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -96,15 +95,16 @@ if [[ -f "$TMP_DB/$DB_FILE" ]]; then
 fi
 rm -rf "$TMP_DB"
 
-# ---------------- 配置文件 ----------------
+# ---------------- 配置文件只更新 IP 和 Hash ----------------
 DEFAULT_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
 DEFAULT_HASH=$(openssl rand -hex 32)
+
 if [[ -f "$CFG" ]]; then
   CUR_IP=$(grep -A 10 "server_ips:" "$CFG" | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -n1 | sed 's/.*"\([^"]*\)".*/\1/')
   CUR_HASH=$(grep "api_hash:" "$CFG" | sed 's/.*"\([^"]*\)".*/\1/')
 else
-  CUR_IP="$DEFAULT_IP"
-  CUR_HASH="$DEFAULT_HASH"
+  err "配置文件不存在，请确认已正确安装"
+  exit 1
 fi
 
 # 交互设置
@@ -115,99 +115,10 @@ API_HASH=${API_HASH:-$CUR_HASH}
 ok "使用外网IP: $EXTERNAL_IP"
 ok "使用API Hash: $API_HASH"
 
-# 生成完整配置文件（新安装）或更新 IP/Hash（升级）
-if [[ ! -f "$CFG" ]]; then
-cat > "$CFG" <<EOF
-# LXD API 配置文件
-server:
-  port: 8080
-  mode: release
-  tls:
-    enabled: true
-    cert_file: "server.crt"
-    key_file: "server.key"
-    auto_gen: true
-    server_ips:
-      - "$EXTERNAL_IP"
-      - "localhost"
-      - "127.0.0.1"
-
-security:
-  enable_auth: true
-  api_hash: "$API_HASH"
-  hash_expire_hours: 24
-
-database:
-  path: "$DB_FILE"
-  enable_log: false
-
-lxc:
-  timeout: 60
-  verbose: false
-
-task:
-  max_concurrent: 10
-  history_days: 30
-  enable_log: true
-
-traffic:
-  interval: 5
-  enable_log: false
-
-container:
-  enable_log: false
-
-nat:
-  enable_log: false
-
-console:
-  enabled: true
-  session_timeout: 1800
-  enable_log: false
-
-traffic_limit:
-  enabled: true
-  check_interval_seconds: 5
-  enable_log: false
-  auto_suspend: true
-
-database_cleanup:
-  enabled: true
-  check_interval_hours: 1
-  enable_log: false
-  auto_cleanup: true
-
-cors:
-  enabled: true
-  allow_origins:
-    - "*"
-  allow_methods:
-    - "GET"
-    - "POST"
-    - "PUT"
-    - "DELETE"
-    - "OPTIONS"
-    - "PATCH"
-  allow_headers:
-    - "Origin"
-    - "Content-Type"
-    - "Accept"
-    - "Authorization"
-    - "X-API-Hash"
-    - "X-Requested-With"
-    - "apikey"
-  expose_headers:
-    - "Content-Length"
-    - "X-Total-Count"
-  allow_credentials: true
-  max_age: 86400
-EOF
-ok "配置文件生成完成"
-else
-  sed -i "s/\([ ]*-\s*\).*/\1\"$EXTERNAL_IP\"/1" "$CFG"
-  sed -i "s/\(api_hash:\s*\).*/\1\"$API_HASH\"/" "$CFG"
-  ok "配置文件更新完成"
-fi
+# 更新配置文件 IP 和 Hash
+sed -i "s/\([ ]*-\s*\).*/\1\"$EXTERNAL_IP\"/1" "$CFG"
+sed -i "s/\(api_hash:\s*\).*/\1\"$API_HASH\"/" "$CFG"
+ok "配置文件更新完成"
 
 # ---------------- systemd ----------------
 cat > "$SERVICE" <<EOF
@@ -228,11 +139,17 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now $NAME
-ok "服务已启动"
 
-# ---------------- 完成 ----------------
-echo
+# ---------------- 输出信息 ----------------
 ok "安装/升级完成！"
 info "目录: $DIR"
 info "配置: $CFG"
 info "访问: https://$EXTERNAL_IP:8080"
+
+# 输出运行进程
+PID=$(pgrep -f "$BIN")
+if [[ -n "$PID" ]]; then
+  info "进程信息: $BIN (PID $PID) 正在运行"
+else
+  warn "进程 $BIN 未运行"
+fi
