@@ -56,22 +56,15 @@ check_root() {
 get_latest_version() {
     log_info "获取最新版本信息..."
     
-    # 从GitHub API获取最新release信息
-    local api_response
-    if ! api_response=$(curl -s "$GITHUB_API/releases/latest"); then
-        log_error "无法获取版本信息，请检查网络连接"
-        exit 1
-    fi
-    
-    # 解析版本号
-    VERSION=$(echo "$api_response" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+    # 尝试获取最新版本，失败则使用默认版本
+    VERSION=$(curl -s "https://api.github.com/repos/xkatld/zjmf-lxd-server/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 2>/dev/null)
     
     if [ -z "$VERSION" ]; then
-        log_error "无法解析版本信息"
-        exit 1
+        VERSION="v0.0.2"
+        log_warning "无法获取最新版本，使用默认版本: $VERSION"
+    else
+        log_success "获取到最新版本: $VERSION"
     fi
-    
-    log_success "获取到最新版本: $VERSION"
 }
 
 # 检查当前安装版本
