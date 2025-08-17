@@ -1,4 +1,5 @@
 #!/bin/bash
+# ZJMF LXD Server 安装/升级脚本（保留数据库、交互配置，不生成新配置）
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -95,7 +96,7 @@ if [[ -f "$TMP_DB/$DB_FILE" ]]; then
 fi
 rm -rf "$TMP_DB"
 
-# ---------------- 配置文件只更新 IP 和 Hash ----------------
+# ---------------- 配置更新（只改 server_ips 和 api_hash） ----------------
 DEFAULT_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
 DEFAULT_HASH=$(openssl rand -hex 32)
 
@@ -103,7 +104,7 @@ if [[ -f "$CFG" ]]; then
   CUR_IP=$(grep -A 10 "server_ips:" "$CFG" | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -n1 | sed 's/.*"\([^"]*\)".*/\1/')
   CUR_HASH=$(grep "api_hash:" "$CFG" | sed 's/.*"\([^"]*\)".*/\1/')
 else
-  err "配置文件不存在，请确认已正确安装"
+  err "配置文件不存在，请先创建配置文件"
   exit 1
 fi
 
@@ -115,8 +116,8 @@ API_HASH=${API_HASH:-$CUR_HASH}
 ok "使用外网IP: $EXTERNAL_IP"
 ok "使用API Hash: $API_HASH"
 
-# 更新配置文件 IP 和 Hash
-sed -i "s/\([ ]*-\s*\).*/\1\"$EXTERNAL_IP\"/1" "$CFG"
+# 仅更新 server_ips 和 api_hash
+sed -i "/server_ips:/,/^[^ ]/ s/\(- \"\)\([^\"\n]*\)\(\".*\)/\1$EXTERNAL_IP\3/" "$CFG"
 sed -i "s/\(api_hash:\s*\).*/\1\"$API_HASH\"/" "$CFG"
 ok "配置文件更新完成"
 
@@ -139,17 +140,12 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now $NAME
+ok "服务已启动"
 
 # ---------------- 输出信息 ----------------
+echo
 ok "安装/升级完成！"
+info "进程: $BIN"
 info "目录: $DIR"
 info "配置: $CFG"
 info "访问: https://$EXTERNAL_IP:8080"
-
-# 输出运行进程
-PID=$(pgrep -f "$BIN")
-if [[ -n "$PID" ]]; then
-  info "进程信息: $BIN (PID $PID) 正在运行"
-else
-  warn "进程 $BIN 未运行"
-fi
