@@ -1,198 +1,84 @@
 #!/bin/bash
-
-# LXD自动安装脚本
-# 支持Debian和Ubuntu系统
-
 set -e
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-# 日志函数
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# 检查是否为root用户
 check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        log_error "请使用root权限运行此脚本"
-        log_info "使用命令: sudo $0"
-        exit 1
-    fi
+    [ "$EUID" -ne 0 ] && log_error "请使用root权限运行此脚本"
 }
 
-# 检查操作系统
 check_os() {
-    log_info "检查操作系统..."
-    
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$NAME
-        VERSION=$VERSION_ID
-    else
-        log_error "无法确定操作系统版本"
-        exit 1
-    fi
-    
-    case $OS in
-        "Ubuntu")
-            log_success "检测到Ubuntu系统 - 版本: $VERSION"
+    . /etc/os-release || log_error "无法检测系统"
+    case $ID in
+        ubuntu)
+            [ "${VERSION_ID%%.*}" -lt 24 ] && log_error "检测到Ubuntu $VERSION_ID，仅支持Ubuntu 24及以上"
             ;;
-        "Debian GNU/Linux")
-            log_success "检测到Debian系统 - 版本: $VERSION"
+        debian)
+            [ "${VERSION_ID%%.*}" -lt 12 ] && log_error "检测到Debian $VERSION_ID，仅支持Debian 12及以上"
             ;;
-        *)
-            log_error "不支持的操作系统: $OS"
-            log_error "此脚本仅支持Debian和Ubuntu系统"
-            exit 1
-            ;;
+        *) log_error "检测到不支持的系统: $NAME，仅支持Ubuntu 24+ 和 Debian 12+" ;;
     esac
+    log_success "系统检测通过: $NAME $VERSION_ID"
 }
 
-# 检查系统架构
 check_architecture() {
-    log_info "检查系统架构..."
-    
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64)
-            log_success "检测到x86_64架构"
-            ;;
-        aarch64|arm64)
-            log_success "检测到ARM64架构"
-            ;;
-        armv7l)
-            log_success "检测到ARMv7架构"
-            ;;
-        *)
-            log_warning "检测到架构: $ARCH"
-            log_warning "可能不被完全支持，但将尝试继续安装"
-            ;;
+    case $(uname -m) in
+        x86_64) log_success "检测到amd64架构";;
+        aarch64|arm64) log_success "检测到arm64架构";;
+        *) log_error "检测到不支持的架构: $(uname -m)，仅支持amd64和arm64";;
     esac
 }
 
-# 更新软件包源
 update_packages() {
     log_info "更新软件包源..."
     apt update
-    log_success "软件包源更新完成"
 }
 
-# 安装snapd
 install_snapd() {
-    log_info "检查snapd安装状态..."
-    
-    if command -v snap >/dev/null 2>&1; then
-        log_success "snapd已安装"
-        snap version
-        return 0
+    if ! command -v snap >/dev/null 2>&1; then
+        log_info "安装snapd..."
+        apt install -y snapd
+        systemctl enable --now snapd
+        sleep 10
+        [ ! -L /snap ] && ln -s /var/lib/snapd/snap /snap || true
     fi
-    
-    log_info "安装snapd..."
-    apt install -y snapd
-    
-    # 启动snapd服务
-    systemctl enable snapd
-    systemctl start snapd
-    
-    # 等待snapd初始化
-    log_info "等待snapd服务初始化..."
-    sleep 10
-    
-    # 创建snap软链接（对于某些系统可能需要）
-    if [ ! -L /snap ]; then
-        ln -s /var/lib/snapd/snap /snap 2>/dev/null || true
-    fi
-    
-    log_success "snapd安装完成"
-    snap version
+    log_success "snapd已安装"
 }
 
-# 安装LXD
 install_lxd() {
-    log_info "检查LXD安装状态..."
-    
-    if snap list lxd >/dev/null 2>&1; then
-        log_success "LXD已通过snap安装"
-        return 0
+    if ! snap list lxd >/dev/null 2>&1; then
+        log_info "安装LXD..."
+        snap install lxd
     fi
-    
-    log_info "通过snap安装LXD..."
-    snap install lxd
-    
-    log_success "LXD安装完成"
+    log_success "LXD已安装"
 }
 
-# 配置用户组
 configure_lxd_group() {
-    log_info "配置LXD用户组..."
-    
-    # 获取当前登录用户（不是root）
-    REAL_USER=$(who am i | awk '{print $1}' | head -n1)
-    if [ -z "$REAL_USER" ]; then
-        REAL_USER=$SUDO_USER
-    fi
-    
+    REAL_USER=${SUDO_USER:-$(logname 2>/dev/null)}
     if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
         usermod -aG lxd "$REAL_USER"
-        log_success "用户 $REAL_USER 已添加到lxd组"
-        log_warning "请注销并重新登录以使组权限生效，或使用 'newgrp lxd' 命令"
-    else
-        log_warning "无法确定当前用户，请手动将用户添加到lxd组: usermod -aG lxd [username]"
+        log_success "用户 $REAL_USER 已加入lxd组"
+        log_warning "请重新登录或执行 'newgrp lxd' 生效"
     fi
 }
 
-# 显示LXD版本信息
 show_lxd_version() {
-    log_info "LXD版本信息："
-    lxd --version
-    echo
-    
-    log_info "LXD详细信息："
+    log_info "LXD版本: $(lxd --version)"
     snap info lxd | grep -E "(installed|tracking|refresh-date)"
 }
 
-# 显示初始化命令和说明
 show_init_instructions() {
     echo
-    log_success "=== LXD安装完成! ==="
-    echo
-    log_info "下一步操作："
-    echo
-    echo -e "${YELLOW}1. 初始化LXD:${NC}"
-    echo -e "   ${GREEN}lxd init${NC}"
-    echo
-    echo -e "${YELLOW}2. 或使用自动配置初始化:${NC}"
-    echo -e "   ${GREEN}lxd init --auto${NC}"
-    echo
-    log_warning "注意: 如果您不是root用户，请确保已退出并重新登录以使lxd组权限生效"
+    log_success "LXD安装完成!"
+    echo -e "${YELLOW}运行初始化:${NC} ${GREEN}lxd init${NC} 或 ${GREEN}lxd init --auto${NC}"
 }
 
-# 主函数
 main() {
-    echo -e "${BLUE}================================================${NC}"
-    echo -e "${BLUE}           LXD 自动安装脚本${NC}"
-    echo -e "${BLUE}        支持 Debian 和 Ubuntu 系统${NC}"
-    echo -e "${BLUE}================================================${NC}"
-    echo
-    
     check_root
     check_os
     check_architecture
@@ -202,13 +88,8 @@ main() {
     configure_lxd_group
     show_lxd_version
     show_init_instructions
-    
-    echo
     log_success "脚本执行完成!"
 }
 
-# 错误处理
-trap 'log_error "脚本执行过程中发生错误，请检查上述输出信息"; exit 1' ERR
-
-# 执行主函数
+trap 'log_error "执行出错，请检查日志"' ERR
 main
