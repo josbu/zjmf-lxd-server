@@ -95,16 +95,13 @@ fi
 rm -rf "$TMP_DB"
 
 DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
+DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
 
-if [[ -f "$CFG" ]]; then
-  CUR_IP=$(grep -E "PUBLIC_NETWORK_IP_ADDRESS" "$CFG" | head -n1 | sed 's/.*PUBLIC_NETWORK_IP_ADDRESS.*/PUBLIC_NETWORK_IP_ADDRESS/')
-  CUR_HASH=$(grep "API_ACCESS_HASH" "$CFG" | head -n1 | sed 's/.*API_ACCESS_HASH.*/API_ACCESS_HASH/')
-else
-  err "配置文件不存在，请先创建配置文件"
-fi
+read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
+EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
 
-EXTERNAL_IP=${DEFAULT_IP}
-API_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
+read -p "API Hash [$DEFAULT_HASH]: " API_HASH
+API_HASH=${API_HASH:-$DEFAULT_HASH}
 
 sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
 sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
