@@ -1,11 +1,12 @@
+
 #!/bin/bash
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; NC='\033[0m'
 
 REPO="https://github.com/xkatld/zjmf-lxd-server"
-VERSION="v0.0.2"
-NAME="zjmf-lxd-server"
+VERSION=""
+NAME="lxdapi"
 DIR="/opt/$NAME"
 CFG="$DIR/config.yaml"
 SERVICE="/etc/systemd/system/$NAME.service"
@@ -23,17 +24,31 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     -v|--version) VERSION="$2"; [[ $VERSION != v* ]] && VERSION="v$VERSION"; shift 2;;
     -f|--force) FORCE=true; shift;;
-    -h|--help) echo "$0 [-v 版本] [-f]"; exit 0;;
+    -h|--help) echo "$0 -v 版本 [-f]"; exit 0;;
     *) err "未知参数 $1";;
   esac
 done
+
+if [[ -z "$VERSION" ]]; then
+  err "必须提供版本号参数，使用 -v 或 --version 指定版本"
+fi
 
 arch=$(uname -m)
 case $arch in
   x86_64) BIN="lxdapi-amd64";;
   aarch64|arm64) BIN="lxdapi-arm64";;
-  *) err "不支持架构 $arch";;
+  *) err "不支持的架构: $arch，仅支持 amd64 和 arm64";;
 esac
+
+if ! command -v lxd &> /dev/null; then
+  err "未检测到 LXD，请先安装 LXD"
+fi
+
+lxd_version=$(lxd --version 2>/dev/null | grep -oE '^[0-9]+')
+if [[ -z "$lxd_version" || "$lxd_version" -lt 5 ]]; then
+  err "LXD 版本必须 >= 5.0，当前版本: $(lxd --version)"
+fi
+
 DOWNLOAD_URL="$REPO/releases/download/$VERSION/$BIN.zip"
 
 UPGRADE=false
@@ -55,7 +70,11 @@ systemctl stop $NAME 2>/dev/null || true
 
 TMP_DB=$(mktemp -d)
 if [[ $UPGRADE == true ]]; then
-  [[ -f "$DIR/$DB_FILE" ]] && cp "$DIR/$DB_FILE" "$TMP_DB/" && ok "数据库已备份"
+  if [[ -f "$DIR/$DB_FILE" ]]; then
+    cp "$DIR/$DB_FILE" "$TMP_DB/" && ok "数据库已备份"
+    [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$TMP_DB/" 
+    [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$TMP_DB/"
+  fi
   rm -rf "$DIR"/*
 fi
 mkdir -p "$DIR"
@@ -67,29 +86,32 @@ chmod +x "$DIR/$BIN"
 echo "$VERSION" > "$DIR/version"
 rm -rf "$TMP"
 
-[[ -f "$TMP_DB/$DB_FILE" ]] && mv "$TMP_DB/$DB_FILE" "$DIR/"
+if [[ -f "$TMP_DB/$DB_FILE" ]]; then
+  mv "$TMP_DB/$DB_FILE" "$DIR/"
+  [[ -f "$TMP_DB/$DB_FILE-shm" ]] && mv "$TMP_DB/$DB_FILE-shm" "$DIR/"
+  [[ -f "$TMP_DB/$DB_FILE-wal" ]] && mv "$TMP_DB/$DB_FILE-wal" "$DIR/"
+  ok "数据库已恢复"
+fi
 rm -rf "$TMP_DB"
 
-DEFAULT_IP=$(curl -s ifconfig.me || curl -s ip.sb || echo "127.0.0.1")
+DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
 
 if [[ -f "$CFG" ]]; then
-  CUR_IP=$(grep -E "^- \"([0-9]{1,3}\.){3}[0-9]{1,3}\"" "$CFG" | head -n1 | sed 's/.*"\([^"]*\)".*/\1/')
-  CUR_HASH=$(grep "api_hash:" "$CFG" | sed 's/.*"\([^"]*\)".*/\1/')
+  CUR_IP=$(grep -E "PUBLIC_NETWORK_IP_ADDRESS" "$CFG" | head -n1 | sed 's/.*PUBLIC_NETWORK_IP_ADDRESS.*/PUBLIC_NETWORK_IP_ADDRESS/')
+  CUR_HASH=$(grep "API_ACCESS_HASH" "$CFG" | head -n1 | sed 's/.*API_ACCESS_HASH.*/API_ACCESS_HASH/')
 else
   err "配置文件不存在，请先创建配置文件"
 fi
 
-read -p "外网IP [$CUR_IP]: " EXTERNAL_IP
-EXTERNAL_IP=${EXTERNAL_IP:-$CUR_IP}
-read -p "API Hash [$CUR_HASH]: " API_HASH
-API_HASH=${API_HASH:-$CUR_HASH}
+EXTERNAL_IP=${DEFAULT_IP}
+API_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
 
-sed -i "s/^- \".*\"/- \"$EXTERNAL_IP\"/" "$CFG"
-sed -i "s/\(api_hash:\s*\).*/\1\"$API_HASH\"/" "$CFG"
+sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
+sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
 
 cat > "$SERVICE" <<EOF
 [Unit]
-Description=ZJMF LXD Server
+Description=lxdapi-xkatld
 After=network.target
 
 [Service]
@@ -111,6 +133,7 @@ systemctl enable --now $NAME
 echo
 ok "安装/升级完成"
 echo "数据目录: $DIR"
-systemctl is-active --quiet $NAME \
-  && echo "服务状态: 已启动" \
-  || echo "服务状态: 未运行"
+echo "外网IP: $EXTERNAL_IP"
+echo "API Hash: $API_HASH"
+echo "服务状态信息:"
+systemctl status $NAME --no-pager
