@@ -12,6 +12,7 @@ CFG="$DIR/config.yaml"
 SERVICE="/etc/systemd/system/$NAME.service"
 DB_FILE="lxdapi.db"
 FORCE=false
+REWRITE=false
 
 log() { echo -e "$1"; }
 ok() { log "${GREEN}[OK]${NC} $1"; }
@@ -24,7 +25,8 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     -v|--version) VERSION="$2"; [[ $VERSION != v* ]] && VERSION="v$VERSION"; shift 2;;
     -f|--force) FORCE=true; shift;;
-    -h|--help) echo "$0 -v 版本 [-f]"; exit 0;;
+    -r|--rewrite) REWRITE=true; shift;;
+    -h|--help) echo "$0 -v 版本 [-f] [-r]"; exit 0;;
     *) err "未知参数 $1";;
   esac
 done
@@ -97,14 +99,25 @@ rm -rf "$TMP_DB"
 DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
 DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
 
-read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
-EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
+if [[ $REWRITE == true ]] || [[ ! -f "$CFG" ]]; then
+  read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
+  EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
 
-read -p "API Hash [$DEFAULT_HASH]: " API_HASH
-API_HASH=${API_HASH:-$DEFAULT_HASH}
+  read -p "API Hash [$DEFAULT_HASH]: " API_HASH
+  API_HASH=${API_HASH:-$DEFAULT_HASH}
 
-sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
-sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
+  sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
+  sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
+else
+  read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
+  EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
+
+  read -p "API Hash [$DEFAULT_HASH]: " API_HASH
+  API_HASH=${API_HASH:-$DEFAULT_HASH}
+
+  sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
+  sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
+fi
 
 cat > "$SERVICE" <<EOF
 [Unit]
