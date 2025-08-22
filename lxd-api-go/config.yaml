@@ -1,131 +1,112 @@
 # LXD API 配置文件
-server:
-  # API服务端口
-  port: 8080
-  # 服务模式 (debug/release)
-  mode: release
-  # TLS配置 (启用HTTPS/WSS)
-  tls:
-    enabled: true                    # 启用TLS
-    cert_file: "server.crt"         # SSL证书文件路径
-    key_file: "server.key"          # SSL私钥文件路径
-    auto_gen: true                   # 自动生成自签证书
-    server_ips:                      # 服务器IP列表（用于证书SAN）
-      - "173.208.194.82"           # 外网IP
-      - "localhost"                 # 本地访问
-      - "127.0.0.1"                # 本地IP
 
-# 安全配置
-security:
-  # 是否启用hash验证
-  enable_auth: true
-  # API访问hash (用于验证请求)
-  api_hash: "384fde3636e6e01e0194d2976d8f26410af3e846e573379cb1a09e2f0752d8cc"
-  # hash过期时间(小时)
-  hash_expire_hours: 24
+# 系统配置
+system:
+  # 服务器配置
+  server:
+    # API服务端口
+    port: 8080
+    # 服务模式 (debug=详细日志+错误堆栈, release=精简日志+生产优化)
+    mode: release
+    # TLS配置 - 强制启用HTTPS/WSS
+    tls:
+      cert_file: "server.crt"         # SSL证书文件路径
+      key_file: "server.key"          # SSL私钥文件路径
+      auto_gen: true                  # 自动生成自签证书
+      server_ips:                     # 服务器IP列表（用于证书SAN）
+        - "PUBLIC_NETWORK_IP_ADDRESS"           # 外网IP
+  # 安全配置
+  security:
+    # API访问hash (用于验证请求) - hash验证必须开启
+    # 注意：这个hash需要与ZJMF系统中lxdserver插件配置的accesshash一致
+    api_hash: "API_ACCESS_HASH"
+    # 是否启用认证日志
+    enable_log: false
+  # 数据库配置
+  database:
+    # 数据库文件路径
+    path: "lxdapi.db"
+    # 是否启用数据库日志
+    enable_log: false
+  # LXC命令配置
+  lxc:
+    # 普通命令超时时间(秒)
+    timeout: 60
+    # 长时间操作超时时间(秒) - 如创建、重装容器
+    long_timeout: 300
+    # 是否启用详细日志
+    verbose: false
+  # CORS跨域配置 - 用于Web控制台访问
+  cors:
+    # 允许的源 (生产环境建议配置具体域名)
+    allow_origins: ["*"]
+    # 是否允许凭证
+    allow_credentials: true
 
-# 数据库配置
-database:
-  # 数据库文件路径
-  path: "lxdapi.db"
-  # 是否启用数据库日志
+# 任务状态查询配置
+task_status:
+  # 是否启用任务状态查询日志
   enable_log: false
+  # 任务数据保留时间
+  retention_hours: 168
 
-# LXC命令配置
-lxc:
-  # 命令超时时间(秒)
-  timeout: 60
-  # 是否启用详细日志
-  verbose: false
+# 容器管理接口配置
+container_api:
+  # 是否启用容器管理接口日志
+  enable_log: false
+  # 是否记录详细的操作参数
+  log_params: false
+  # 是否记录操作结果
+  log_results: true
 
-# 任务配置
-task:
-  # 最大并发任务数
-  max_concurrent: 10
-  # 任务历史保留天数
-  history_days: 30
-  # 是否启用任务执行日志
-  enable_log: true
+# 容器状态查询接口配置
+container_status:
+  # 是否启用容器状态查询接口日志
+  enable_log: false
+  # 是否记录查询参数
+  log_params: true
+  # 是否记录查询结果
+  log_results: true
 
-# 流量统计配置
-traffic:
+# 流量统计接口配置
+traffic_api:
   # 统计间隔（秒）
   interval: 5
-  # 是否启用详细日志
+  # 是否启用流量统计接口日志
   enable_log: false
+  # 是否记录查询参数
+  log_params: true
+  # 是否记录查询结果
+  log_results: true
+  # 流量限制检测配置
+  limit_check:
+    # 检测间隔（秒）
+    check_interval: 5
+    # 是否启用流量限制检测日志
+    enable_log: false
+  # 自动流量重置配置
+  auto_reset:
+    # 检查间隔（秒）
+    check_interval: 360
+    # 是否启用自动重置日志
+    enable_log: false
 
-# 容器操作配置
-container:
-  # 是否启用容器操作详细日志
+# NAT端口转发接口配置
+nat_api:
+  # 是否启用NAT接口日志
   enable_log: false
+  # 是否记录操作参数
+  log_params: true
+  # 是否记录操作结果
+  log_results: true
 
-# NAT端口转发配置
-nat:
-  # 是否启用NAT操作详细日志
+# Web控制台接口配置
+console_api:
+  # 是否启用控制台接口日志
   enable_log: false
-
-# Web控制台配置
-console:
-  # 是否启用Web控制台功能
-  enabled: true
-  # 控制台会话超时时间（秒）
+  # 是否记录操作参数
+  log_params: true
+  # 是否记录操作结果
+  log_results: true
+  # 控制台会话超时时间(秒)
   session_timeout: 1800
-  # 是否启用控制台操作日志
-  enable_log: false
-
-# 流量限制配置
-traffic_limit:
-  # 是否启用流量限制功能
-  enabled: true
-  # 检查间隔（秒）
-  check_interval_seconds: 5
-  # 是否启用详细日志
-  enable_log: false
-  # 超限后是否自动暂停
-  auto_suspend: true
-
-# 数据库清理配置
-database_cleanup:
-  # 是否启用数据库清理功能
-  enabled: true
-  # 检查间隔（小时）
-  check_interval_hours: 1
-  # 是否启用详细日志
-  enable_log: false
-  # 是否自动清理孤立记录
-  auto_cleanup: true
-
-# CORS跨域配置
-cors:
-  # 是否启用CORS（生产环境建议启用）
-  enabled: true
-  # 允许的源（生产环境建议配置具体域名）
-  allow_origins:
-    - "*"  # 开发环境可以使用*，生产环境建议配置具体域名
-    # - "https://yourdomain.com"
-    # - "https://admin.yourdomain.com"
-  # 允许的HTTP方法
-  allow_methods:
-    - "GET"
-    - "POST"
-    - "PUT"
-    - "DELETE"
-    - "OPTIONS"
-    - "PATCH"
-  # 允许的请求头
-  allow_headers:
-    - "Origin"
-    - "Content-Type"
-    - "Accept"
-    - "Authorization"
-    - "X-API-Hash"
-    - "X-Requested-With"
-    - "apikey"  # API密钥头部
-  # 暴露的响应头
-  expose_headers:
-    - "Content-Length"
-    - "X-Total-Count"
-  # 是否允许凭证
-  allow_credentials: true
-  # 预检请求缓存时间（秒）
-  max_age: 86400
