@@ -32,6 +32,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $DELETE == true ]]; then
+  echo "警告: 此操作将删除所有数据，包括数据库文件！"
+  read -p "确定要继续吗? (y/N): " CONFIRM
+  if [[ $CONFIRM != "y" && $CONFIRM != "Y" ]]; then
+    ok "取消删除操作"
+    exit 0
+  fi
+  
   systemctl stop $NAME 2>/dev/null || true
   systemctl disable $NAME 2>/dev/null || true
   rm -f "$SERVICE"
