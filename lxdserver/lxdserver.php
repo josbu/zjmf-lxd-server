@@ -23,7 +23,7 @@ function lxdserver_MetaData()
 {
     return [
         'DisplayName' => '魔方财务-LXD对接插件 by xkatld',
-        'APIVersion'  => '0.0.2',
+        'APIVersion'  => '1.0.0',
         'HelpDoc'     => 'https://github.com/xkatld/zjmf-lxd-server',
     ];
 }
@@ -49,8 +49,8 @@ function lxdserver_ConfigOptions()
         [
             'type'        => 'text',
             'name'        => '硬盘',
-            'description' => 'GB',
-            'default'     => '10',
+            'description' => 'MB',
+            'default'     => '1024',
             'key'         => 'disk',
         ],
         [
@@ -71,7 +71,7 @@ function lxdserver_ConfigOptions()
             'type'        => 'text',
             'name'        => '镜像',
             'description' => '容器镜像名称',
-            'default'     => 'ubuntu24',
+            'default'     => 'debian12',
             'key'         => 'image',
         ],
         [
@@ -88,14 +88,14 @@ function lxdserver_ConfigOptions()
         [
             'type'        => 'text',
             'name'        => 'NAT规则数量限制',
-            'description' => '最大NAT转发规则数量',
+            'description' => 'NAT转发规则数量',
             'default'     => '5',
             'key'         => 'nat_limit',
         ],
         [
             'type'        => 'text',
-            'name'        => '月流量限制',
-            'description' => '每月同日期重置',
+            'name'        => '流量限制',
+            'description' => 'GB/月，0表示无限制',
             'default'     => '100',
             'key'         => 'traffic_limit',
         ],
@@ -121,50 +121,54 @@ function lxdserver_TestLink($params)
             'status' => 200,
             'data'   => [
                 'server_status' => 0,
-                'msg'           => "无法连接到LXD API服务器，请检查服务器IP、端口或确认API服务是否正在运行。",
-            ],
+                'msg'           => "连接失败: 无法连接到服务器"
+            ]
         ];
-    }
-
-    if (isset($res['code'])) {
-        if ($res['code'] == 200 && isset($res['msg']) && $res['msg'] == 'API连接正常') {
-            $lxdVersion = $res['data']['lxd_version'] ?? 'unknown';
-            $apiVersion = $res['data']['api_version'] ?? '1.0.0';
-            return [
-                'status' => 200,
-                'data'   => [
-                    'server_status' => 1,
-                    'msg'           => "LXD API服务器连接成功且API密钥有效。(LXD版本: {$lxdVersion}, API版本: {$apiVersion})",
-                ],
-            ];
-        }
-
-        if ($res['code'] == 401) {
-            return [
-                'status' => 200,
-                'data'   => [
-                    'server_status' => 0,
-                    'msg'           => "LXD API服务器连接成功，但提供的API密钥无效。",
-                ],
-            ];
-        }
-
+    } elseif (isset($res['error'])) {
+        // 处理Go API的错误响应格式 {"error": "错误信息"}
         return [
             'status' => 200,
             'data'   => [
                 'server_status' => 0,
-                'msg'           => "LXD API服务器连接成功，但API响应了非预期的状态。Code: " . $res['code'],
-            ],
+                'msg'           => "连接失败: " . $res['error']
+            ]
+        ];
+    } elseif (isset($res['code']) && $res['code'] == 200) {
+        // API返回成功状态
+        return [
+            'status' => 200,
+            'data'   => [
+                'server_status' => 1,
+                'msg'           => "连接成功"
+            ]
+        ];
+    } elseif (isset($res['lxd_version'])) {
+        // 处理直接返回系统信息的情况（如根路径 /）
+        return [
+            'status' => 200,
+            'data'   => [
+                'server_status' => 1,
+                'msg'           => "连接成功"
+            ]
+        ];
+    } elseif (isset($res['code'])) {
+        // API返回错误状态
+        return [
+            'status' => 200,
+            'data'   => [
+                'server_status' => 0,
+                'msg'           => "连接失败: " . ($res['msg'] ?? '服务器返回错误')
+            ]
+        ];
+    } else {
+        return [
+            'status' => 200,
+            'data'   => [
+                'server_status' => 0,
+                'msg'           => "连接失败: 响应格式异常"
+            ]
         ];
     }
-
-    return [
-        'status' => 200,
-        'data'   => [
-            'server_status' => 0,
-            'msg'           => "连接到LXD API服务器但收到意外的响应格式。",
-        ],
-    ];
 }
 
 // 客户区域面板配置
@@ -225,7 +229,7 @@ function lxdserver_ClientAreaOutput($params, $key)
         } elseif (!is_array($res)) {
             $res = ['code' => 500, 'msg' => '服务器返回了无效的响应格式'];
         } else {
-            $res = lxdserver_TransformAPIResponse($action, $res, $params);
+            $res = lxdserver_TransformAPIResponse($action, $res);
         }
 
         // 返回JSON响应
@@ -289,16 +293,16 @@ function lxdserver_CreateAccount($params)
         'url'  => '/api/create',
         'type' => 'application/json',
         'data' => [
-            'hostname'       => $params['domain'],
-            'password'       => $sys_pwd,
-            'cpus'           => (int)($params['configoptions']['cpus'] ?? 1),
-            'memory'         => (int)($params['configoptions']['memory'] ?? 512),
-            'disk'           => (int)($params['configoptions']['disk'] ?? 10),
-            'image'          => $params['configoptions']['image'] ?? 'ubuntu24',
-            'ingress'        => (int)($params['configoptions']['ingress'] ?? 100),
-            'egress'         => (int)($params['configoptions']['egress'] ?? 100),
-            'allow_nesting'  => ($params['configoptions']['allow_nesting'] ?? 'false') === 'true',
-            'traffic_limit'  => (int)($params['configoptions']['traffic_limit'] ?? 0),
+            'hostname'      => $params['domain'],
+            'password'      => $sys_pwd,
+            'cpus'          => (int)($params['configoptions']['cpus'] ?? 1),
+            'memory'        => (int)($params['configoptions']['memory'] ?? 512),
+            'disk'          => (int)($params['configoptions']['disk'] ?? 10240),
+            'image'         => $params['configoptions']['image'] ?? 'ubuntu24',
+            'ingress'       => (int)($params['configoptions']['ingress'] ?? 100),
+            'egress'        => (int)($params['configoptions']['egress'] ?? 100),
+            'allow_nesting' => ($params['configoptions']['allow_nesting'] ?? 'false') === 'true',
+            'traffic_limit' => (int)($params['configoptions']['traffic_limit'] ?? 0),
         ],
     ];
 
@@ -308,18 +312,26 @@ function lxdserver_CreateAccount($params)
 
     if (isset($res['code']) && $res['code'] == '200') {
         // 快速创建成功，直接更新数据库
+        $dedicatedip_value = $params['server_ip'];
+        
+        // 从响应中获取SSH端口并构建dedicatedip格式
+        if (!empty($res['data']['ssh_port'])) {
+            $ssh_port = $res['data']['ssh_port'];
+            $dedicatedip_value = $params['server_ip'] . ':' . $ssh_port;
+            lxdserver_debug('获取到SSH端口', ['ssh_port' => $ssh_port]);
+        } else {
+            lxdserver_debug('警告：响应中没有SSH端口信息', $res);
+        }
+        
         $update = [
-            'dedicatedip'  => $params['server_ip'],
+            'dedicatedip'  => $dedicatedip_value,
             'domainstatus' => 'Active',
             'username'     => $params['domain'],
         ];
 
-        // 从响应中获取SSH端口
+        // 同时保存SSH端口到port字段
         if (!empty($res['data']['ssh_port'])) {
             $update['port'] = $res['data']['ssh_port'];
-            lxdserver_debug('获取到SSH端口', ['ssh_port' => $res['data']['ssh_port']]);
-        } else {
-            lxdserver_debug('警告：响应中没有SSH端口信息', $res);
         }
 
         try {
@@ -348,8 +360,15 @@ function lxdserver_Sync($params)
     if (isset($res['code']) && $res['code'] == '200') {
         if (class_exists('think\Db') && isset($params['hostid'])) {
             try {
+                $dedicatedip_value = $params['server_ip'];
+                
+                // 如果API返回了SSH端口信息，构建server_ip:ssh_port格式
+                if (isset($res['data']['ssh_port']) && !empty($res['data']['ssh_port'])) {
+                    $dedicatedip_value = $params['server_ip'] . ':' . $res['data']['ssh_port'];
+                }
+                
                 Db::name('host')->where('id', $params['hostid'])->update([
-                    'dedicatedip' => $params['server_ip'],
+                    'dedicatedip' => $dedicatedip_value,
                 ]);
             } catch (Exception $e) {
                 lxdserver_debug('同步数据库失败', ['error' => $e->getMessage()]);
@@ -407,22 +426,6 @@ function lxdserver_Off($params)
     }
 }
 
-function lxdserver_Reboot($params)
-{
-    $data = [
-        'url'  => '/api/reboot?' . 'hostname=' . $params['domain'],
-        'type' => 'application/x-www-form-urlencoded',
-        'data' => [],
-    ];
-    $res = lxdserver_Curl($params, $data, 'GET');
-
-    if (isset($res['code']) && $res['code'] == '200') {
-        return ['status' => 'success', 'msg' => $res['msg'] ?? '重启成功'];
-    } else {
-        return ['status' => 'error', 'msg' => $res['msg'] ?? '重启失败'];
-    }
-}
-
 // 暂停容器
 function lxdserver_SuspendAccount($params)
 {
@@ -462,6 +465,22 @@ function lxdserver_UnsuspendAccount($params)
         return ['status' => 'success', 'msg' => $res['msg'] ?? '容器恢复任务已提交'];
     } else {
         return ['status' => 'error', 'msg' => $res['msg'] ?? '容器恢复失败'];
+    }
+}
+
+function lxdserver_Reboot($params)
+{
+    $data = [
+        'url'  => '/api/reboot?' . 'hostname=' . $params['domain'],
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == '200') {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? '重启成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '重启失败'];
     }
 }
 
@@ -586,7 +605,7 @@ function lxdserver_Status($params)
                 break;
             case 'FROZEN':
                 $result['data']['status'] = 'suspend';
-                $result['data']['des'] = '暂停';
+                $result['data']['des'] = '流量超标-暂停';
                 break;
             default:
                 $result['data']['status'] = 'unknown';
@@ -687,6 +706,7 @@ function lxdserver_JSONCurl($params, $data = [], $request = 'POST')
     if ($isSecure) {
         $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
         $curlOptions[CURLOPT_SSL_VERIFYHOST] = false;
+        $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2; // 强制使用TLS 1.2
     }
 
     curl_setopt_array($curl, $curlOptions);
@@ -752,6 +772,7 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
     if ($isSecure) {
         $curlOptions[CURLOPT_SSL_VERIFYPEER] = false; // 忽略自签证书验证
         $curlOptions[CURLOPT_SSL_VERIFYHOST] = false; // 忽略主机名验证
+        $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2; // 强制使用TLS 1.2
     }
 
     curl_setopt_array($curl, $curlOptions);
@@ -763,16 +784,23 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
     $response = curl_exec($curl);
     $errno    = curl_errno($curl);
     $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($curl);
 
     curl_close($curl);
 
     lxdserver_debug('请求响应', [
         'http_code' => $httpCode,
-        'response_length' => strlen($response)
+        'response_length' => strlen($response),
+        'curl_errno' => $errno,
+        'curl_error' => $curlError
     ]);
 
     if ($errno) {
-        lxdserver_debug('CURL错误', ['error' => curl_strerror($errno)]);
+        lxdserver_debug('CURL错误', [
+            'errno' => $errno,
+            'error' => $curlError,
+            'error_desc' => curl_strerror($errno)
+        ]);
         return null;
     }
 
@@ -782,8 +810,16 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
 }
 
 // API响应格式转换
-function lxdserver_TransformAPIResponse($action, $response, $params = null)
+function lxdserver_TransformAPIResponse($action, $response)
 {
+    // 处理Go API的错误响应格式
+    if (isset($response['error'])) {
+        return [
+            'code' => 400,
+            'msg' => $response['error']
+        ];
+    }
+
     if (!isset($response['code']) || $response['code'] != 200) {
         return $response; // 错误响应直接返回
     }
@@ -815,14 +851,15 @@ function lxdserver_TransformAPIResponse($action, $response, $params = null)
                         // 配置信息
                         'cpus' => $data['config']['cpus'] ?? 1,
                         'memory' => $data['memory'] ?? 1024,  // 使用原始数字
-                        'disk' => $data['disk'] ?? 10,        // 使用原始数字
+                        'disk' => $data['disk'] ?? 10240,        // 使用原始数字
 
                         // 格式化配置信息（用于前端显示）
                         'config' => [
                             'cpus' => $data['config']['cpus'] ?? 1,
                             'memory' => $data['config']['memory'] ?? '1024 MB',
-                            'disk' => $data['config']['disk'] ?? '10 GB',
-                        ],
+                            'disk' => $data['config']['disk'] ?? '10240 MB',
+                            'traffic_limit' => $data['config']['traffic_limit'] ?? 0,
+                        ], // traffic_limit: 流量限制（GB/月）
 
                         // 实时使用情况
                         'cpu_usage' => $data['usage']['cpu_usage'] ?? 0,
@@ -838,33 +875,11 @@ function lxdserver_TransformAPIResponse($action, $response, $params = null)
                         'memory_percent' => $data['usage_percent']['memory_percent'] ?? 0,
                         'disk_percent' => $data['usage_percent']['disk_percent'] ?? 0,
 
-                        // 流量限制信息
-                        'traffic_limit_gb' => 0,
-                        'traffic_limit_display' => '不限制',
-                        'traffic_percent' => 0,
-
                         // 添加时间戳用于调试
                         'last_update' => date('Y-m-d H:i:s'),
                         'timestamp' => time(),
                     ]
                 ];
-
-                // 添加流量限制信息
-                if ($params && isset($params['configoptions']['traffic_limit'])) {
-                    $trafficLimitGB = intval($params['configoptions']['traffic_limit']);
-                    $trafficUsageRaw = $data['usage']['traffic_usage_raw'] ?? 0;
-                    $trafficUsageGB = $trafficUsageRaw / (1024 * 1024 * 1024);
-
-                    $transformed['data']['traffic_limit_gb'] = $trafficLimitGB;
-
-                    if ($trafficLimitGB > 0) {
-                        $transformed['data']['traffic_limit_display'] = $trafficLimitGB . ' GB';
-                        $transformed['data']['traffic_percent'] = min(100, ($trafficUsageGB / $trafficLimitGB) * 100);
-                    } else {
-                        $transformed['data']['traffic_limit_display'] = '不限制';
-                        $transformed['data']['traffic_percent'] = 0;
-                    }
-                }
 
                 return $transformed;
             }
@@ -940,8 +955,8 @@ function lxdserver_vnc($params) {
         return ['status' => 'error', 'msg' => $tokenRes['msg'] ?? '生成控制台令牌失败'];
     }
 
-    // 构建控制台URL（强制使用HTTPS）
-    $protocol = 'https';
+    // 构建控制台URL
+    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
     $consoleUrl = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . '/console?token=' . $tokenRes['data']['token'];
 
     lxdserver_debug('VNC控制台URL生成', ['url' => $consoleUrl]);

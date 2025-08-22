@@ -10,6 +10,7 @@
 .badge { font-size: 0.75em; }
 </style>
 
+<div class="container-fluid">
 <!-- 容器状态监控 -->
 <div class="card shadow mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -132,6 +133,7 @@
         </div>
     </div>
 </div>
+</div>
 
 <script>
 // INFO调试模式开关
@@ -216,7 +218,8 @@ function updateAllInfo(data) {
     // 更新CPU信息
     const cpuUsage = data.cpu_usage || 0;
     const cpuCores = data.cpus || 'N/A';
-    $('#cpu-info').text(`${cpuUsage}% (${cpuCores} Core)`);
+    const cpuUsageFormatted = parseFloat(cpuUsage).toFixed(1);
+    $('#cpu-info').text(`${cpuUsageFormatted}% (${cpuCores} Core)`);
     $('#cpu-progress').css('width', Math.min(parseFloat(cpuUsage) || 0, 100) + '%');
 
     // 更新内存信息
@@ -226,30 +229,70 @@ function updateAllInfo(data) {
     $('#memory-info').text(`${memoryUsage} / ${memoryTotal}`);
     $('#memory-progress').css('width', Math.min(memoryPercent, 100) + '%');
 
+    // 格式化硬盘大小显示（MB转换为合适的单位）
+    function formatDiskSize(mb) {
+        if (typeof mb === 'string') {
+            // 如果已经是格式化的字符串（如 "10240 MB"），尝试提取数字
+            const match = mb.match(/^(\d+(?:\.\d+)?)\s*MB$/i);
+            if (match) {
+                mb = parseFloat(match[1]);
+            } else {
+                return mb; // 返回原始字符串
+            }
+        }
+        
+        mb = parseFloat(mb);
+        if (isNaN(mb)) return 'N/A';
+        
+        if (mb >= 1024) {
+            return (mb / 1024).toFixed(2) + ' GB';
+        } else {
+            return mb.toFixed(0) + ' MB';
+        }
+    }
+
     // 更新硬盘信息
     const diskUsage = data.disk_usage || 'N/A';
-    const diskTotal = (data.config && data.config.disk) || 'N/A';
+    let diskTotal = 'N/A';
+    
+    // 处理硬盘总量显示
+    if (data.config && data.config.disk) {
+        diskTotal = formatDiskSize(data.config.disk);
+    } else if (data.disk) {
+        diskTotal = formatDiskSize(data.disk);
+    }
+    
     const diskPercent = parseFloat(data.disk_percent) || 0;
     $('#disk-info').text(`${diskUsage} / ${diskTotal}`);
     $('#disk-progress').css('width', Math.min(diskPercent, 100) + '%');
 
     // 更新流量信息
     const trafficUsage = data.traffic_usage || 'N/A';
-    const trafficLimit = data.traffic_limit_display || '不限制';
-    const trafficPercent = parseFloat(data.traffic_percent) || 0;
-
-    $('#traffic-info').text(`${trafficUsage} / ${trafficLimit}`);
-    $('#traffic-progress').css('width', Math.min(trafficPercent, 100) + '%');
-
-    // 根据使用率调整进度条颜色
-    const progressBar = $('#traffic-progress');
-    progressBar.removeClass('bg-warning bg-danger bg-success');
-    if (trafficPercent >= 90) {
-        progressBar.addClass('bg-danger');
-    } else if (trafficPercent >= 80) {
-        progressBar.addClass('bg-warning');
+    const trafficUsageRaw = data.traffic_usage_raw || 0;
+    const trafficLimit = data.config && data.config.traffic_limit ? data.config.traffic_limit : 0;
+    
+    if (trafficLimit > 0) {
+        // 有流量限制：显示 已用/限制
+        const trafficLimitGB = trafficLimit;
+        const trafficUsageGB = (trafficUsageRaw / (1024 * 1024 * 1024)).toFixed(2);
+        const trafficPercent = Math.min((parseFloat(trafficUsageGB) / trafficLimitGB) * 100, 100);
+        
+        $('#traffic-info').text(`${trafficUsageGB} GB / ${trafficLimitGB} GB`);
+        $('#traffic-progress').css('width', trafficPercent + '%');
+        
+        // 流量超限时显示警告样式
+        if (trafficPercent >= 100) {
+            $('#traffic-progress').removeClass('bg-warning').addClass('bg-danger');
+        } else if (trafficPercent >= 80) {
+            $('#traffic-progress').removeClass('bg-danger').addClass('bg-warning');
+        } else {
+            $('#traffic-progress').removeClass('bg-danger bg-warning').addClass('bg-warning');
+        }
     } else {
-        progressBar.addClass('bg-success');
+        // 无流量限制：只显示累计流量
+        $('#traffic-info').text(`累计: ${trafficUsage}`);
+        $('#traffic-progress').css('width', '10%');
+        $('#traffic-progress').removeClass('bg-danger').addClass('bg-warning');
     }
 
     // 更新时间

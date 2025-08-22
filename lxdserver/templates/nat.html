@@ -59,15 +59,14 @@
                 <table class="table table-hover mb-0" style="width:100%">
                     <thead class="thead-light">
                         <tr>
-                            <th style="width:20%"><i class="fas fa-globe mr-1"></i>外网端口</th>
-                            <th style="width:20%"><i class="fas fa-server mr-1"></i>内网端口</th>
-                            <th style="width:20%"><i class="fas fa-network-wired mr-1"></i>协议类型</th>
-                            <th style="width:20%"><i class="fas fa-signal mr-1"></i>状态</th>
-                            <th style="width:20%"><i class="fas fa-cogs mr-1"></i>操作</th>
+                            <th style="width:25%; font-size:0.875rem;"><i class="fas fa-globe mr-1"></i>外网端口</th>
+                            <th style="width:25%; font-size:0.875rem;"><i class="fas fa-server mr-1"></i>内网端口</th>
+                            <th style="width:25%; font-size:0.875rem;"><i class="fas fa-network-wired mr-1"></i>协议类型</th>
+                            <th style="width:25%; font-size:0.875rem;"><i class="fas fa-cogs mr-1"></i>操作</th>
                         </tr>
                     </thead>
                     <tbody id="nat-tbody">
-                        <tr><td colspan="5" class="text-center text-muted">加载中...</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -352,15 +351,11 @@ function fetchNATList() {
                         const dtype = (item.protocol || item.dtype || '').toLowerCase();
                         const status = (item.status || 'active').toLowerCase();
 
-                        const dtypeBadge = dtype === 'udp' ? '<span class="badge badge-info">UDP</span>' : '<span class="badge badge-success">TCP</span>';
-                        const statusBadge = status === 'active'
-                            ? '<span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>活跃</span>'
-                            : '<span class="badge badge-secondary"><i class="fas fa-pause-circle mr-1"></i>停用</span>';
+                        const dtypeBadge = dtype === 'udp' ? '<span class="badge badge-info" style="font-size:0.75rem;">UDP</span>' : '<span class="badge badge-success" style="font-size:0.75rem;">TCP</span>';
                         html += '<tr>' +
-                                '<td><span class="badge badge-primary">' + dport + '</span></td>' +
-                                '<td><span class="font-weight-bold">' + sport + '</span></td>' +
+                                '<td><span class="badge badge-primary" style="font-size:0.875rem;">' + dport + '</span></td>' +
+                                '<td><span class="font-weight-bold" style="font-size:0.875rem;">' + sport + '</span></td>' +
                                 '<td>' + dtypeBadge + '</td>' +
-                                '<td>' + statusBadge + '</td>' +
                                 '<td><button class="btn btn-danger btn-sm deleteNATlxdserveracl" data-dport="' + dport + '" data-sport="' + sport + '" data-dtype="' + dtype + '"><i class="fas fa-trash mr-1"></i>删除</button></td>' +
                                 '</tr>';
                     });
