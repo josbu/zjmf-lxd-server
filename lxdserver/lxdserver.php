@@ -956,7 +956,7 @@ function lxdserver_vnc($params) {
     }
 
     // 构建控制台URL
-    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+    $protocol = 'https';
     $consoleUrl = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . '/console?token=' . $tokenRes['data']['token'];
 
     lxdserver_debug('VNC控制台URL生成', ['url' => $consoleUrl]);
