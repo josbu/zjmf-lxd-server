@@ -229,26 +229,16 @@ function updateAllInfo(data) {
     $('#memory-info').text(`${memoryUsage} / ${memoryTotal}`);
     $('#memory-progress').css('width', Math.min(memoryPercent, 100) + '%');
 
-    // 格式化硬盘大小显示（MB转换为合适的单位）
-    function formatDiskSize(mb) {
-        if (typeof mb === 'string') {
-            // 如果已经是格式化的字符串（如 "10240 MB"），尝试提取数字
-            const match = mb.match(/^(\d+(?:\.\d+)?)\s*MB$/i);
-            if (match) {
-                mb = parseFloat(match[1]);
-            } else {
-                return mb; // 返回原始字符串
-            }
+    // 直接显示配置值，不进行单位转换
+    function formatDiskSize(value) {
+        if (typeof value === 'string') {
+            return value; // 直接返回配置中的字符串值
         }
         
-        mb = parseFloat(mb);
-        if (isNaN(mb)) return 'N/A';
+        const num = parseFloat(value);
+        if (isNaN(num)) return 'N/A';
         
-        if (mb >= 1024) {
-            return (mb / 1024).toFixed(2) + ' GB';
-        } else {
-            return mb.toFixed(0) + ' MB';
-        }
+        return num + ' MB'; // 数字值默认按MB处理
     }
 
     // 更新硬盘信息

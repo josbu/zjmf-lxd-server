@@ -21,19 +21,16 @@
                     <h6 class="m-0 font-weight-bold text-primary">NAT端口转发管理</h6>
                     <small class="text-muted">管理容器端口转发规则</small>
                     <div class="mt-2">
-                        <span class="badge badge-info">
-                            最后更新: <span id="last-update">刚刚</span>
-                        </span>
                         <span class="badge badge-secondary ml-2">
-                            已使用: <span id="current-count">{$current_count|default=0}</span>/{$nat_limit|default=5} 条规则
+                            已使用: <span id="current-count">{$current_count}</span>/{$nat_limit} 条规则
                         </span>
                         <span class="badge badge-success ml-1">
-                            剩余: <span id="remaining-count">{$remaining_count|default=5}</span> 条
+                            剩余: <span id="remaining-count">{$remaining_count}</span> 条
                         </span>
                     </div>
                 </div>
-                <div class="btn-group">
-                    <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#addModallxdserveracl" id="add-nat-btn">
+                <div class="d-flex">
+                    <button class="btn btn-primary btn-sm mr-2" data-toggle="modal" data-target="#addModallxdserveracl" id="add-nat-btn">
                         <i class="fas fa-plus mr-1"></i>创建转发
                     </button>
                     <button class="btn btn-secondary btn-sm" onclick="refreshNATPage()">
@@ -119,16 +116,16 @@
                                     </div>
                                     <select name="dtype">
                                         <option value="tcp" selected>TCP</option>
-                                        <option value="udp">UDP</option>
+                                        {if $udp_enabled}<option value="udp">UDP</option>{/if}
                                     </select>
                                 </div>
                             </div>
-                            <small class="form-text text-muted">TCP适用于HTTP/HTTPS等，UDP适用于DNS等</small>
+                            <small class="form-text text-muted">{if $udp_enabled}TCP适用于HTTP/HTTPS等，UDP适用于DNS等{else}TCP适用于HTTP/HTTPS/SSH等服务{/if}</small>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal" onclick="closeAddModal()">
+                    <button type="button" class="btn btn-secondary mr-2" data-dismiss="modal" onclick="closeAddModal()">
                         <i class="fas fa-times mr-1"></i>取消
                     </button>
                     <button type="button" class="btn btn-primary confirm-btnlxdserveracl">
@@ -152,7 +149,7 @@
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="fas fa-server text-primary mr-2"></i><strong>内网端口:</strong> 容器内部服务端口</li>
                         <li class="mb-2"><i class="fas fa-globe text-success mr-2"></i><strong>外网端口:</strong> 外部访问端口</li>
-                        <li class="mb-2"><i class="fas fa-network-wired text-info mr-2"></i><strong>协议类型:</strong> TCP/UDP协议</li>
+                        <li class="mb-2"><i class="fas fa-network-wired text-info mr-2"></i><strong>协议类型:</strong> {if $udp_enabled}TCP/UDP协议{else}TCP协议{/if}</li>
                     </ul>
                 </div>
                 <div class="col-md-6">
@@ -258,8 +255,9 @@ var dportval, sportval, dtypeval;
 var currentContainerId = '';
 var MODULE_API_URL = "{$MODULE_CUSTOM_API}";
 var currentContainerName = '';
-var natLimit = {$nat_limit|default=5};
-var currentCount = {$current_count|default=0};
+var natLimit = {$nat_limit};
+var currentCount = {$current_count};
+var udpEnabled = {if $udp_enabled}true{else}false{/if};
 
 $(document).ready(function() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -274,7 +272,6 @@ $(document).ready(function() {
     natDebug('设置容器ID', containerId);
 
     getContainerInfo(containerId);
-    updateLastUpdateTime();
     fetchNATList();
 
     // 每10秒自动刷新
@@ -288,16 +285,7 @@ function refreshNATRules() {
 window.refreshNATRules = refreshNATRules;
 window.refreshNATPage = refreshNATRules;
 
-function updateLastUpdateTime() {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('zh-CN', {
-        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
-    const lastUpdateElement = document.getElementById('last-update');
-    if (lastUpdateElement) {
-        lastUpdateElement.textContent = timeString;
-    }
-}
+
 
 function getContainerInfo(containerId) {
     if (!containerId) return;
@@ -340,6 +328,8 @@ function fetchNATList() {
                 if (list.length === 0) {
                     $empty.show();
                     $listContainer.hide();
+                    // 更新计数器为0
+                    updateNATCounters(0);
                 } else {
                     $empty.hide();
                     $listContainer.show();
@@ -356,7 +346,7 @@ function fetchNATList() {
                                 '<td><span class="badge badge-primary" style="font-size:0.875rem;">' + dport + '</span></td>' +
                                 '<td><span class="font-weight-bold" style="font-size:0.875rem;">' + sport + '</span></td>' +
                                 '<td>' + dtypeBadge + '</td>' +
-                                '<td><button class="btn btn-danger btn-sm deleteNATlxdserveracl" data-dport="' + dport + '" data-sport="' + sport + '" data-dtype="' + dtype + '"><i class="fas fa-trash mr-1"></i>删除</button></td>' +
+                                '<td><button class="btn btn-danger btn-sm deleteNATlxdserveracl px-3 py-1" data-dport="' + dport + '" data-sport="' + sport + '" data-dtype="' + dtype + '"><i class="fas fa-trash mr-1"></i>删除</button></td>' +
                                 '</tr>';
                     });
                     $tbody.html(html);
@@ -365,11 +355,10 @@ function fetchNATList() {
                     // 直接使用NAT规则总数（SSH端口不在此列表中）
                     updateNATCounters(list.length);
                 }
-                updateLastUpdateTime();
             }
         },
         error: function() {
-            updateLastUpdateTime();
+            // 错误处理保持为空
         }
     });
 }
@@ -457,7 +446,7 @@ $(document).on('click', '.deleteNATlxdserveracl', function (e) {
         buttonsStyling: false,
         customClass: {
             popup: 'swal2-bootstrap-card',
-            confirmButton: 'btn btn-danger',
+            confirmButton: 'btn btn-danger mr-2',
             cancelButton: 'btn btn-secondary'
         },
         confirmButtonText: '确认删除',
@@ -540,6 +529,16 @@ $('.confirm-btnlxdserveracl').on('click', function () {
             icon: 'error',
             title: '协议类型无效',
             text: '请选择有效的协议类型（TCP或UDP）'
+        });
+        return;
+    }
+    
+    // 检查UDP是否被禁用
+    if (dtypeVal === 'udp' && !udpEnabled) {
+        Swal.fire({
+            icon: 'error',
+            title: 'UDP协议已禁用',
+            text: '当前产品配置不支持UDP端口转发'
         });
         return;
     }

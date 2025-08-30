@@ -4,10 +4,9 @@ use app\common\logic\RunMap;
 use app\common\model\HostModel;
 use think\Db;
 
-// 调试模式配置 - 手动修改此值来控制调试输出
-define('LXDSERVER_DEBUG', true); // true=调试模式, false=生产模式
+// 调试模式
+define('LXDSERVER_DEBUG', true);
 
-// 调试日志函数
 function lxdserver_debug($message, $data = null) {
     if (!LXDSERVER_DEBUG) return;
 
@@ -18,7 +17,7 @@ function lxdserver_debug($message, $data = null) {
     error_log($log);
 }
 
-// 插件元数据
+// 插件元数据信息
 function lxdserver_MetaData()
 {
     return [
@@ -28,81 +27,161 @@ function lxdserver_MetaData()
     ];
 }
 
-// 产品配置选项
+// 定义产品配置选项
 function lxdserver_ConfigOptions()
 {
     return [
-        [
+        'image' => [
             'type'        => 'text',
-            'name'        => '核心',
-            'description' => 'CPU核心数',
+            'name'        => '镜像',
+            'description' => '容器镜像名称, 如: debian/12',
+            'default'     => 'debian/12',
+            'key'         => 'image',
+        ],
+        'cpus' => [
+            'type'        => 'text',
+            'name'        => 'CPU核心数',
+            'description' => '容器的CPU核心数量',
             'default'     => '1',
             'key'         => 'cpus',
         ],
-        [
+        'memory' => [
             'type'        => 'text',
             'name'        => '内存',
-            'description' => 'MB',
-            'default'     => '512',
+            'description' => '容器的内存大小, 支持MB/GB/TB',
+            'default'     => '256MB',
             'key'         => 'memory',
         ],
-        [
+        'disk' => [
             'type'        => 'text',
             'name'        => '硬盘',
-            'description' => 'MB',
-            'default'     => '1024',
+            'description' => '容器的硬盘大小, 支持MB/GB/TB',
+            'default'     => '512MB',
             'key'         => 'disk',
         ],
-        [
+        'ingress' => [
             'type'        => 'text',
-            'name'        => '上行带宽',
-            'description' => 'Mbps',
-            'default'     => '100',
+            'name'        => '入站带宽',
+            'description' => '容器的入站带宽限制, 支持kbit/Mbit/Gbit',
+            'default'     => '100Mbit',
             'key'         => 'ingress',
         ],
-        [
+        'egress' => [
             'type'        => 'text',
-            'name'        => '下行带宽',
-            'description' => 'Mbps',
-            'default'     => '100',
+            'name'        => '出站带宽',
+            'description' => '容器的出站带宽限制, 支持kbit/Mbit/Gbit',
+            'default'     => '100Mbit',
             'key'         => 'egress',
         ],
-        [
+        'nat_limit' => [
             'type'        => 'text',
-            'name'        => '镜像',
-            'description' => '容器镜像名称',
-            'default'     => 'debian12',
-            'key'         => 'image',
-        ],
-        [
-            'type'        => 'dropdown',
-            'name'        => '是否开启嵌套',
-            'description' => '允许容器内运行虚拟化',
-            'default'     => 'true',
-            'key'         => 'allow_nesting',
-            'options'     => [
-                'true'  => '启用',
-                'false' => '禁用',
-            ],
-        ],
-        [
-            'type'        => 'text',
-            'name'        => 'NAT规则数量限制',
-            'description' => 'NAT转发规则数量',
+            'name'        => 'NAT规则数量',
+            'description' => 'NAT端口转发规则的数量限制',
             'default'     => '5',
             'key'         => 'nat_limit',
         ],
-        [
+        'traffic_limit' => [
             'type'        => 'text',
-            'name'        => '流量限制',
-            'description' => 'GB/月，0表示无限制',
+            'name'        => '月流量限制',
+            'description' => '每月流量限制(GB), 0为不限制',
             'default'     => '100',
             'key'         => 'traffic_limit',
+        ],
+        'cpu_allowance' => [
+            'type'        => 'text',
+            'name'        => 'CPU使用率限制',
+            'description' => 'CPU使用率百分比, 如: 50%',
+            'default'     => '50%',
+            'key'         => 'cpu_allowance',
+        ],
+        'cpu_priority' => [
+            'type'        => 'dropdown',
+            'name'        => 'CPU调度优先级',
+            'description' => 'CPU调度优先级 (0-10)',
+            'default'     => '5',
+            'key'         => 'cpu_priority',
+            'options'     => array_combine(range(0, 10), range(0, 10)),
+        ],
+        'memory_swap' => [
+            'type'        => 'dropdown',
+            'name'        => 'Swap开关',
+            'description' => '是否允许使用Swap',
+            'default'     => 'true',
+            'key'         => 'memory_swap',
+            'options'     => ['true' => '启用', 'false' => '禁用'],
+        ],
+        'memory_swap_priority' => [
+            'type'        => 'dropdown',
+            'name'        => 'Swap优先级',
+            'description' => 'Swap优先级 (0-10)',
+            'default'     => '5',
+            'key'         => 'memory_swap_priority',
+            'options'     => array_combine(range(0, 10), range(0, 10)),
+        ],
+        'disk_priority' => [
+            'type'        => 'dropdown',
+            'name'        => '磁盘IO优先级',
+            'description' => '磁盘IO优先级 (0-10)',
+            'default'     => '5',
+            'key'         => 'disk_priority',
+            'options'     => array_combine(range(0, 10), range(0, 10)),
+        ],
+        'disk_read_limit' => [
+            'type'        => 'text',
+            'name'        => '磁盘读取限速',
+            'description' => '磁盘每秒读取速度限制, 如: 100MB',
+            'default'     => '100MB',
+            'key'         => 'disk_read_limit',
+        ],
+        'disk_write_limit' => [
+            'type'        => 'text',
+            'name'        => '磁盘写入限速',
+            'description' => '磁盘每秒写入速度限制, 如: 100MB',
+            'default'     => '100MB',
+            'key'         => 'disk_write_limit',
+        ],
+        'max_processes' => [
+            'type'        => 'text',
+            'name'        => '最大进程数',
+            'description' => '限制容器最大进程数',
+            'default'     => '512',
+            'key'         => 'max_processes',
+        ],
+        'max_nofile' => [
+            'type'        => 'text',
+            'name'        => '最大文件描述符数',
+            'description' => '限制容器内最大文件/连接数',
+            'default'     => '1048576',
+            'key'         => 'max_nofile',
+        ],
+        'allow_nesting' => [
+            'type'        => 'dropdown',
+            'name'        => '嵌套虚拟化',
+            'description' => '是否允许容器内运行虚拟化',
+            'default'     => 'true',
+            'key'         => 'allow_nesting',
+            'options'     => ['true' => '启用', 'false' => '禁用'],
+        ],
+        'privileged' => [
+            'type'        => 'dropdown',
+            'name'        => '特权模式',
+            'description' => '是否允许特权容器运行',
+            'default'     => 'false',
+            'key'         => 'privileged',
+            'options'     => ['false' => '禁用 (推荐)', 'true' => '启用'],
+        ],
+        'udp_enabled' => [
+            'type'        => 'dropdown',
+            'name'        => 'UDP协议支持',
+            'description' => '是否允许创建UDP端口转发规则',
+            'default'     => 'true',
+            'key'         => 'udp_enabled',
+            'options'     => ['true' => '启用', 'false' => '禁用'],
         ],
     ];
 }
 
-// 测试API连接
+// 测试与API服务器的连接
 function lxdserver_TestLink($params)
 {
     lxdserver_debug('开始测试API连接', $params);
@@ -125,7 +204,6 @@ function lxdserver_TestLink($params)
             ]
         ];
     } elseif (isset($res['error'])) {
-        // 处理Go API的错误响应格式 {"error": "错误信息"}
         return [
             'status' => 200,
             'data'   => [
@@ -134,7 +212,6 @@ function lxdserver_TestLink($params)
             ]
         ];
     } elseif (isset($res['code']) && $res['code'] == 200) {
-        // API返回成功状态
         return [
             'status' => 200,
             'data'   => [
@@ -143,7 +220,6 @@ function lxdserver_TestLink($params)
             ]
         ];
     } elseif (isset($res['lxd_version'])) {
-        // 处理直接返回系统信息的情况（如根路径 /）
         return [
             'status' => 200,
             'data'   => [
@@ -152,7 +228,6 @@ function lxdserver_TestLink($params)
             ]
         ];
     } elseif (isset($res['code'])) {
-        // API返回错误状态
         return [
             'status' => 200,
             'data'   => [
@@ -171,7 +246,7 @@ function lxdserver_TestLink($params)
     }
 }
 
-// 客户区域面板配置
+// 定义客户区域的页面
 function lxdserver_ClientArea($params)
 {
     return [
@@ -180,12 +255,11 @@ function lxdserver_ClientArea($params)
     ];
 }
 
-// 客户区域输出处理
+// 处理客户区域页面的内容和API请求
 function lxdserver_ClientAreaOutput($params, $key)
 {
     lxdserver_debug('ClientAreaOutput调用', ['key' => $key, 'action' => $_GET['action'] ?? null]);
 
-    // 处理API请求
     if (isset($_GET['action'])) {
         $action = $_GET['action'];
         lxdserver_debug('处理API请求', ['action' => $action, 'domain' => $params['domain'] ?? null]);
@@ -196,7 +270,6 @@ function lxdserver_ClientAreaOutput($params, $key)
             exit;
         }
 
-        // API端点映射
         $apiEndpoints = [
             'getinfo'    => '/api/status',
             'getstats'   => '/api/info',
@@ -223,7 +296,6 @@ function lxdserver_ClientAreaOutput($params, $key)
         $res = lxdserver_Curl($params, $requestData, 'GET');
         lxdserver_debug('API响应', $res);
 
-        // 处理响应
         if ($res === null) {
             $res = ['code' => 500, 'msg' => '连接服务器失败'];
         } elseif (!is_array($res)) {
@@ -232,7 +304,6 @@ function lxdserver_ClientAreaOutput($params, $key)
             $res = lxdserver_TransformAPIResponse($action, $res);
         }
 
-        // 返回JSON响应
         header('Content-Type: application/json');
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
@@ -241,7 +312,6 @@ function lxdserver_ClientAreaOutput($params, $key)
         exit;
     }
 
-    // 返回模板
     if ($key == 'info') {
         return [
             'template' => 'templates/info.html',
@@ -257,9 +327,9 @@ function lxdserver_ClientAreaOutput($params, $key)
         ];
         $res = lxdserver_Curl($params, $requestData, 'GET');
 
-        // 计算当前NAT规则数量和限制
         $nat_limit = intval($params['configoptions']['nat_limit'] ?? 5);
         $current_count = lxdserver_getNATRuleCount($params);
+        $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'true') === 'true';
 
         return [
             'template' => 'templates/nat.html',
@@ -269,12 +339,13 @@ function lxdserver_ClientAreaOutput($params, $key)
                 'nat_limit' => $nat_limit,
                 'current_count' => $current_count,
                 'remaining_count' => max(0, $nat_limit - $current_count),
+                'udp_enabled' => $udp_enabled,
             ],
         ];
     }
 }
 
-// 允许的客户端函数
+// 定义允许客户端调用的函数
 function lxdserver_AllowFunction()
 {
     return [
@@ -282,7 +353,7 @@ function lxdserver_AllowFunction()
     ];
 }
 
-// 创建容器账户
+// 创建LXD容器 (开通产品)
 function lxdserver_CreateAccount($params)
 {
     lxdserver_debug('开始创建容器', ['domain' => $params['domain']]);
@@ -296,13 +367,25 @@ function lxdserver_CreateAccount($params)
             'hostname'      => $params['domain'],
             'password'      => $sys_pwd,
             'cpus'          => (int)($params['configoptions']['cpus'] ?? 1),
-            'memory'        => (int)($params['configoptions']['memory'] ?? 512),
-            'disk'          => (int)($params['configoptions']['disk'] ?? 10240),
+            'memory'        => $params['configoptions']['memory'] ?? '512MB',
+            'disk'          => $params['configoptions']['disk'] ?? '10GB',
+            'disk_priority' => (int)($params['configoptions']['disk_priority'] ?? 5),
             'image'         => $params['configoptions']['image'] ?? 'ubuntu24',
-            'ingress'       => (int)($params['configoptions']['ingress'] ?? 100),
-            'egress'        => (int)($params['configoptions']['egress'] ?? 100),
+            'ingress'       => $params['configoptions']['ingress'] ?? '100Mbit',
+            'egress'        => $params['configoptions']['egress'] ?? '100Mbit',
             'allow_nesting' => ($params['configoptions']['allow_nesting'] ?? 'false') === 'true',
             'traffic_limit' => (int)($params['configoptions']['traffic_limit'] ?? 0),
+
+            // 高级配置
+            'cpu_allowance'  => $params['configoptions']['cpu_allowance'] ?? '100%',
+            'cpu_priority'   => (int)($params['configoptions']['cpu_priority'] ?? 5),
+            'memory_swap'           => ($params['configoptions']['memory_swap'] ?? 'true') === 'true',
+            'memory_swap_priority'  => (int)($params['configoptions']['memory_swap_priority'] ?? 1),
+            'max_processes'  => (int)($params['configoptions']['max_processes'] ?? 512),
+            'max_nofile'     => (int)($params['configoptions']['max_nofile'] ?? 1048576),
+            'disk_read_limit'   => $params['configoptions']['disk_read_limit'] ?? '',
+            'disk_write_limit'  => $params['configoptions']['disk_write_limit'] ?? '',
+            'privileged'     => ($params['configoptions']['privileged'] ?? 'false') === 'true',
         ],
     ];
 
@@ -311,10 +394,8 @@ function lxdserver_CreateAccount($params)
     lxdserver_debug('创建响应', $res);
 
     if (isset($res['code']) && $res['code'] == '200') {
-        // 快速创建成功，直接更新数据库
         $dedicatedip_value = $params['server_ip'];
-        
-        // 从响应中获取SSH端口并构建dedicatedip格式
+
         if (!empty($res['data']['ssh_port'])) {
             $ssh_port = $res['data']['ssh_port'];
             $dedicatedip_value = $params['server_ip'] . ':' . $ssh_port;
@@ -322,14 +403,14 @@ function lxdserver_CreateAccount($params)
         } else {
             lxdserver_debug('警告：响应中没有SSH端口信息', $res);
         }
-        
+
         $update = [
             'dedicatedip'  => $dedicatedip_value,
             'domainstatus' => 'Active',
-            'username'     => $params['domain'],
+            'username'     => 'root',
         ];
 
-        // 同时保存SSH端口到port字段
+        // 如果API返回了SSH端口，则更新port字段
         if (!empty($res['data']['ssh_port'])) {
             $update['port'] = $res['data']['ssh_port'];
         }
@@ -347,7 +428,7 @@ function lxdserver_CreateAccount($params)
     }
 }
 
-// 同步容器状态
+// 同步容器信息
 function lxdserver_Sync($params)
 {
     $data = [
@@ -361,12 +442,11 @@ function lxdserver_Sync($params)
         if (class_exists('think\Db') && isset($params['hostid'])) {
             try {
                 $dedicatedip_value = $params['server_ip'];
-                
-                // 如果API返回了SSH端口信息，构建server_ip:ssh_port格式
+
                 if (isset($res['data']['ssh_port']) && !empty($res['data']['ssh_port'])) {
                     $dedicatedip_value = $params['server_ip'] . ':' . $res['data']['ssh_port'];
                 }
-                
+
                 Db::name('host')->where('id', $params['hostid'])->update([
                     'dedicatedip' => $dedicatedip_value,
                 ]);
@@ -380,7 +460,7 @@ function lxdserver_Sync($params)
     return ['status' => 'error', 'msg' => $res['msg'] ?? '同步失败'];
 }
 
-// 删除容器
+// 删除LXD容器 (删除产品)
 function lxdserver_TerminateAccount($params)
 {
     $data = [
@@ -395,7 +475,7 @@ function lxdserver_TerminateAccount($params)
         : ['status' => 'error', 'msg' => $res['msg'] ?? '删除失败'];
 }
 
-// 开机容器
+// 启动LXD容器
 function lxdserver_On($params)
 {
     $data = [
@@ -410,6 +490,7 @@ function lxdserver_On($params)
         : ['status' => 'error', 'msg' => $res['msg'] ?? '开机失败'];
 }
 
+// 关闭LXD容器
 function lxdserver_Off($params)
 {
     $data = [
@@ -426,7 +507,7 @@ function lxdserver_Off($params)
     }
 }
 
-// 暂停容器
+// 暂停LXD容器 (产品暂停)
 function lxdserver_SuspendAccount($params)
 {
     lxdserver_debug('开始暂停容器', ['domain' => $params['domain']]);
@@ -447,7 +528,7 @@ function lxdserver_SuspendAccount($params)
     }
 }
 
-// 解除暂停容器
+// 恢复LXD容器 (解除暂停)
 function lxdserver_UnsuspendAccount($params)
 {
     lxdserver_debug('开始解除暂停容器', ['domain' => $params['domain']]);
@@ -468,6 +549,7 @@ function lxdserver_UnsuspendAccount($params)
     }
 }
 
+// 重启LXD容器
 function lxdserver_Reboot($params)
 {
     $data = [
@@ -484,7 +566,7 @@ function lxdserver_Reboot($params)
     }
 }
 
-// 获取容器当前NAT规则数量
+// 获取容器NAT规则数量
 function lxdserver_getNATRuleCount($params)
 {
     $data = [
@@ -496,13 +578,13 @@ function lxdserver_getNATRuleCount($params)
     $res = lxdserver_Curl($params, $data, 'GET');
 
     if (isset($res['code']) && $res['code'] == 200 && isset($res['data']) && is_array($res['data'])) {
-        // 直接返回NAT规则总数（不包括SSH端口，因为SSH端口不在NAT规则列表中）
         return count($res['data']);
     }
 
-    return 0; // 如果获取失败，返回0（允许添加）
+    return 0;
 }
 
+// 添加NAT端口转发
 function lxdserver_natadd($params)
 {
     parse_str(file_get_contents("php://input"), $post);
@@ -521,13 +603,12 @@ function lxdserver_natadd($params)
     // 检查NAT规则数量限制
     $nat_limit = intval($params['configoptions']['nat_limit'] ?? 5);
 
-    // 获取当前容器的NAT规则数量（不包括SSH端口）
     $current_count = lxdserver_getNATRuleCount($params);
     if ($current_count >= $nat_limit) {
         return ['status' => 'error', 'msg' => "NAT规则数量已达到限制（{$nat_limit}条），无法添加更多规则"];
     }
 
-    // 强制由后端自动分配外网端口：不再接受前端传入的 dport
+    // 由后端自动分配外网端口，不接受前端传入的dport
     $requestData = 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($dtype) . '&sport=' . $sport;
 
     $data = [
@@ -545,6 +626,7 @@ function lxdserver_natadd($params)
     }
 }
 
+// 删除NAT端口转发
 function lxdserver_natdel($params)
 {
     parse_str(file_get_contents("php://input"), $post);
@@ -578,6 +660,7 @@ function lxdserver_natdel($params)
     }
 }
 
+// 查询容器运行状态
 function lxdserver_Status($params)
 {
     $data = [
@@ -590,10 +673,9 @@ function lxdserver_Status($params)
     if (isset($res['code']) && $res['code'] == 200) {
         $result = ['status' => 'success'];
 
-        // 获取容器状态
         $containerStatus = $res['data']['status'] ?? '';
 
-        // 状态映射
+        // 将LXD状态映射为ZJMF状态
         switch (strtoupper($containerStatus)) {
             case 'RUNNING':
                 $result['data']['status'] = 'on';
@@ -619,6 +701,7 @@ function lxdserver_Status($params)
     }
 }
 
+// 重置容器密码
 function lxdserver_CrackPassword($params, $new_pass)
 {
     $data = [
@@ -643,6 +726,7 @@ function lxdserver_CrackPassword($params, $new_pass)
     }
 }
 
+// 重装容器操作系统
 function lxdserver_Reinstall($params)
 {
     if (empty($params['reinstall_os'])) {
@@ -658,6 +742,24 @@ function lxdserver_Reinstall($params)
             'hostname' => $params['domain'],
             'system'   => $params['reinstall_os'],
             'password' => $reinstall_pass,
+
+            'cpus'          => (int)($params['configoptions']['cpus'] ?? 1),
+            'memory'        => $params['configoptions']['memory'] ?? '512MB',
+            'disk'          => $params['configoptions']['disk'] ?? '10GB',
+            'disk_priority' => (int)($params['configoptions']['disk_priority'] ?? 5),
+            'ingress'       => $params['configoptions']['ingress'] ?? '100Mbit',
+            'egress'        => $params['configoptions']['egress'] ?? '100Mbit',
+            'allow_nesting' => ($params['configoptions']['allow_nesting'] ?? 'false') === 'true',
+            'traffic_limit' => (int)($params['configoptions']['traffic_limit'] ?? 0),
+            'cpu_allowance'  => $params['configoptions']['cpu_allowance'] ?? '100%',
+            'cpu_priority'   => (int)($params['configoptions']['cpu_priority'] ?? 5),
+            'memory_swap'           => ($params['configoptions']['memory_swap'] ?? 'true') === 'true',
+            'memory_swap_priority'  => (int)($params['configoptions']['memory_swap_priority'] ?? 1),
+            'max_processes'  => (int)($params['configoptions']['max_processes'] ?? 512),
+            'max_nofile'     => (int)($params['configoptions']['max_nofile'] ?? 1048576),
+            'disk_read_limit'   => $params['configoptions']['disk_read_limit'] ?? '',
+            'disk_write_limit'  => $params['configoptions']['disk_write_limit'] ?? '',
+            'privileged'     => ($params['configoptions']['privileged'] ?? 'false') === 'true',
         ],
     ];
     $res = lxdserver_JSONCurl($params, $data, 'POST');
@@ -669,20 +771,13 @@ function lxdserver_Reinstall($params)
     }
 }
 
+// 发送JSON格式的cURL请求
 function lxdserver_JSONCurl($params, $data = [], $request = 'POST')
 {
     $curl = curl_init();
 
-    // 默认使用HTTPS协议（TLS已启用）
-    $isSecure = true;
-
-    // 检查secure参数，如果明确设置为禁用则使用HTTP
-    if (isset($params['secure'])) {
-        $secureValue = strtolower(trim($params['secure']));
-        $isSecure = !in_array($secureValue, ['off', '0', 'false', 'no', 'disabled']);
-    }
-
-    $protocol = $isSecure ? 'https' : 'http';
+    // API服务器强制启用HTTPS
+    $protocol = 'https';
     $url = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . $data['url'];
 
     $curlOptions = [
@@ -702,12 +797,10 @@ function lxdserver_JSONCurl($params, $data = [], $request = 'POST')
         ],
     ];
 
-    // 如果使用HTTPS，添加SSL选项
-    if ($isSecure) {
-        $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
-        $curlOptions[CURLOPT_SSL_VERIFYHOST] = false;
-        $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2; // 强制使用TLS 1.2
-    }
+    // 支持自签证书
+    $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
+    $curlOptions[CURLOPT_SSL_VERIFYHOST] = false;
+    $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2;
 
     curl_setopt_array($curl, $curlOptions);
 
@@ -723,20 +816,13 @@ function lxdserver_JSONCurl($params, $data = [], $request = 'POST')
     return json_decode($response, true);
 }
 
+// 发送通用的cURL请求
 function lxdserver_Curl($params, $data = [], $request = 'POST')
 {
     $curl = curl_init();
 
-    // 默认使用HTTPS协议（TLS已启用）
-    $isSecure = true;
-
-    // 检查secure参数，如果明确设置为禁用则使用HTTP
-    if (isset($params['secure'])) {
-        $secureValue = strtolower(trim($params['secure']));
-        $isSecure = !in_array($secureValue, ['off', '0', 'false', 'no', 'disabled']);
-    }
-
-    $protocol = $isSecure ? 'https' : 'http';
+    // API服务器强制启用HTTPS
+    $protocol = 'https';
     $url = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . $data['url'];
 
     lxdserver_debug('发送请求', [
@@ -768,12 +854,10 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
         ],
     ];
 
-    // 如果使用HTTPS，添加SSL选项
-    if ($isSecure) {
-        $curlOptions[CURLOPT_SSL_VERIFYPEER] = false; // 忽略自签证书验证
-        $curlOptions[CURLOPT_SSL_VERIFYHOST] = false; // 忽略主机名验证
-        $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2; // 强制使用TLS 1.2
-    }
+    // 支持自签证书
+    $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
+    $curlOptions[CURLOPT_SSL_VERIFYHOST] = false;
+    $curlOptions[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2;
 
     curl_setopt_array($curl, $curlOptions);
 
@@ -809,10 +893,10 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
     return $decoded;
 }
 
-// API响应格式转换
+// 转换API响应以适配前端
 function lxdserver_TransformAPIResponse($action, $response)
 {
-    // 处理Go API的错误响应格式
+    // 优先处理Go API的错误响应
     if (isset($response['error'])) {
         return [
             'code' => 400,
@@ -821,47 +905,37 @@ function lxdserver_TransformAPIResponse($action, $response)
     }
 
     if (!isset($response['code']) || $response['code'] != 200) {
-        return $response; // 错误响应直接返回
+        return $response; 
     }
 
     switch ($action) {
         case 'getinfo':
-            // 状态查询，已经是正确格式
             return $response;
 
         case 'getstats':
         case 'getinfoall':
-            // 容器信息查询，需要转换格式
             if (isset($response['data'])) {
                 $data = $response['data'];
 
-                // 转换为模板期望的格式
                 $transformed = [
                     'code' => 200,
                     'msg' => '获取容器信息成功',
                     'data' => [
-                        // 基本信息
                         'hostname' => $data['hostname'] ?? '',
                         'status' => $data['status'] ?? '',
                         'ipv4' => $data['ipv4'] ?? '',
                         'ipv6' => $data['ipv6'] ?? '',
                         'type' => $data['type'] ?? '',
                         'created_at' => $data['created_at'] ?? '',
-
-                        // 配置信息
                         'cpus' => $data['config']['cpus'] ?? 1,
-                        'memory' => $data['memory'] ?? 1024,  // 使用原始数字
-                        'disk' => $data['disk'] ?? 10240,        // 使用原始数字
-
-                        // 格式化配置信息（用于前端显示）
+                        'memory' => $data['memory'] ?? 1024,
+                        'disk' => $data['disk'] ?? 10240,
                         'config' => [
                             'cpus' => $data['config']['cpus'] ?? 1,
                             'memory' => $data['config']['memory'] ?? '1024 MB',
                             'disk' => $data['config']['disk'] ?? '10240 MB',
                             'traffic_limit' => $data['config']['traffic_limit'] ?? 0,
-                        ], // traffic_limit: 流量限制（GB/月）
-
-                        // 实时使用情况
+                        ],
                         'cpu_usage' => $data['usage']['cpu_usage'] ?? 0,
                         'memory_usage' => $data['usage']['memory_usage'] ?? '0 B',
                         'memory_usage_raw' => $data['usage']['memory_usage_raw'] ?? 0,
@@ -869,13 +943,9 @@ function lxdserver_TransformAPIResponse($action, $response)
                         'disk_usage_raw' => $data['usage']['disk_usage_raw'] ?? 0,
                         'traffic_usage' => $data['usage']['traffic_usage'] ?? '0 B',
                         'traffic_usage_raw' => $data['usage']['traffic_usage_raw'] ?? 0,
-
-                        // 使用率百分比
                         'cpu_percent' => $data['usage_percent']['cpu_percent'] ?? 0,
                         'memory_percent' => $data['usage_percent']['memory_percent'] ?? 0,
                         'disk_percent' => $data['usage_percent']['disk_percent'] ?? 0,
-
-                        // 添加时间戳用于调试
                         'last_update' => date('Y-m-d H:i:s'),
                         'timestamp' => time(),
                     ]
@@ -898,9 +968,10 @@ function lxdserver_TransformAPIResponse($action, $response)
             break;
     }
 
-    return $response; // 默认返回原响应
+    return $response;
 }
 
+// 获取NAT规则列表
 function lxdserver_natlist($params)
 {
     $requestData = [
@@ -915,11 +986,10 @@ function lxdserver_natlist($params)
     return $res;
 }
 
-// VNC控制台功能
+// 获取Web控制台URL
 function lxdserver_vnc($params) {
     lxdserver_debug('VNC控制台请求', ['domain' => $params['domain']]);
 
-    // 检查容器状态
     $data = [
         'url'  => '/api/status?hostname=' . $params['domain'],
         'type' => 'application/x-www-form-urlencoded',
@@ -935,7 +1005,6 @@ function lxdserver_vnc($params) {
         return ['status' => 'error', 'msg' => '容器未运行，无法连接控制台'];
     }
 
-    // 生成控制台令牌
     $tokenData = [
         'url'  => '/api/console/create-token',
         'type' => 'application/json',
@@ -955,7 +1024,6 @@ function lxdserver_vnc($params) {
         return ['status' => 'error', 'msg' => $tokenRes['msg'] ?? '生成控制台令牌失败'];
     }
 
-    // 构建控制台URL
     $protocol = 'https';
     $consoleUrl = $protocol . '://' . $params['server_ip'] . ':' . $params['port'] . '/console?token=' . $tokenRes['data']['token'];
 
@@ -968,10 +1036,9 @@ function lxdserver_vnc($params) {
     ];
 }
 
-// 后台自定义按钮定义
+// 定义后台自定义按钮
 function lxdserver_AdminButton($params)
 {
-    // 只有容器已开通时才显示自定义按钮
     if (!empty($params['domain'])) {
         return [
             'TrafficReset' => '流量重置',
@@ -980,7 +1047,7 @@ function lxdserver_AdminButton($params)
     return [];
 }
 
-// 流量重置自定义按钮处理函数
+// 处理流量重置请求
 function lxdserver_TrafficReset($params)
 {
     lxdserver_debug('流量重置请求', ['domain' => $params['domain']]);
