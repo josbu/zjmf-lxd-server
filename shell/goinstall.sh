@@ -117,17 +117,65 @@ if [[ -f "$TMP_DB/$DB_FILE" ]]; then
 fi
 rm -rf "$TMP_DB"
 
+
 DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
 DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
 
+
+get_default_interface() {
+  ip route | grep default | head -1 | awk '{print $5}' || echo "eth0"
+}
+
+get_interface_ipv4() {
+  local interface="$1"
+  ip -4 addr show "$interface" 2>/dev/null | grep inet | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d/ -f1 || echo ""
+}
+
+get_interface_ipv6() {
+  local interface="$1"
+  ip -6 addr show "$interface" 2>/dev/null | grep inet6 | grep -v "::1" | grep -v "fe80" | head -1 | awk '{print $2}' | cut -d/ -f1 || echo ""
+}
+
+DEFAULT_INTERFACE=$(get_default_interface)
+DEFAULT_IPV4=$(get_interface_ipv4 "$DEFAULT_INTERFACE")
+DEFAULT_IPV6=$(get_interface_ipv6 "$DEFAULT_INTERFACE")
+
+[[ -z "$DEFAULT_IPV4" ]] && DEFAULT_IPV4="$DEFAULT_IP"
 read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
 EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
 
 read -p "API Hash [$DEFAULT_HASH]: " API_HASH
 API_HASH=${API_HASH:-$DEFAULT_HASH}
 
+echo
+echo "网络配置选项："
+read -p "是否启用IPv6 NAT支持? (y/N): " IPV6_NAT_INPUT
+if [[ $IPV6_NAT_INPUT == "y" || $IPV6_NAT_INPUT == "Y" ]]; then
+  IPV6_NAT_SUPPORT="true"
+else
+  IPV6_NAT_SUPPORT="false"
+fi
+
+read -p "外网网卡接口 [$DEFAULT_INTERFACE]: " NETWORK_INTERFACE
+NETWORK_INTERFACE=${NETWORK_INTERFACE:-$DEFAULT_INTERFACE}
+
+read -p "外网IPv4地址 [$DEFAULT_IPV4]: " NETWORK_IPV4
+NETWORK_IPV4=${NETWORK_IPV4:-$DEFAULT_IPV4}
+
+if [[ $IPV6_NAT_SUPPORT == "true" ]]; then
+  read -p "外网IPv6地址 [$DEFAULT_IPV6]: " NETWORK_IPV6
+  NETWORK_IPV6=${NETWORK_IPV6:-$DEFAULT_IPV6}
+else
+  NETWORK_IPV6=""
+fi
+
+
 sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
 sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
+sed -i "s/IPV6_NAT_SUPPORT/$IPV6_NAT_SUPPORT/g" "$CFG"
+sed -i "s/NETWORK_EXTERNAL_INTERFACE/$NETWORK_INTERFACE/g" "$CFG"
+sed -i "s/NETWORK_EXTERNAL_IPV4/$NETWORK_IPV4/g" "$CFG"
+sed -i "s/NETWORK_EXTERNAL_IPV6/$NETWORK_IPV6/g" "$CFG"
 
 cat > "$SERVICE" <<EOF
 [Unit]
