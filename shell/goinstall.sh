@@ -119,7 +119,7 @@ rm -rf "$TMP_DB"
 
 DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
 DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
-
+DEFAULT_PORT="8080"
 
 get_default_interface() {
   ip route | grep default | head -1 | awk '{print $5}' || echo "eth0"
@@ -146,6 +146,9 @@ EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
 read -p "API Hash [$DEFAULT_HASH]: " API_HASH
 API_HASH=${API_HASH:-$DEFAULT_HASH}
 
+read -p "API 端口 [$DEFAULT_PORT]: " SERVER_PORT
+SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
+
 echo
 echo "网络配置选项："
 read -p "是否启用IPv6 NAT支持? (y/N): " IPV6_NAT_INPUT
@@ -155,14 +158,14 @@ else
   IPV6_NAT_SUPPORT="false"
 fi
 
-read -p "是否启用IPv6绑定功能? (y/N): " IPV6_BINDING_INPUT
+read -p "是否启用分配独立IPv6功能? (y/N): " IPV6_BINDING_INPUT
 if [[ $IPV6_BINDING_INPUT == "y" || $IPV6_BINDING_INPUT == "Y" ]]; then
   IPV6_BINDING_ENABLED="true"
   
-  read -p "IPv6绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
+  read -p "分配IPv6绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
   IPV6_BINDING_INTERFACE=${IPV6_BINDING_INTERFACE:-$DEFAULT_INTERFACE}
   
-  read -p "IPv6地址池起始地址: " IPV6_POOL_START
+  read -p "分配IPv6地址池起始地址: " IPV6_POOL_START
 else
   IPV6_BINDING_ENABLED="false"
   IPV6_BINDING_INTERFACE=""
@@ -182,16 +185,23 @@ else
   NETWORK_IPV6=""
 fi
 
+replace_config_var() {
+  local placeholder="$1"
+  local value="$2"
+  escaped_value=$(printf '%s\n' "$value" | sed -e 's/[\/&]/\\&/g')
+  sed -i "s/\${$placeholder}/$escaped_value/g" "$CFG"
+}
 
-sed -i "s/PUBLIC_NETWORK_IP_ADDRESS/$EXTERNAL_IP/g" "$CFG"
-sed -i "s/API_ACCESS_HASH/$API_HASH/g" "$CFG"
-sed -i "s/IPV6_NAT_SUPPORT/$IPV6_NAT_SUPPORT/g" "$CFG"
-sed -i "s/NETWORK_EXTERNAL_INTERFACE/$NETWORK_INTERFACE/g" "$CFG"
-sed -i "s/NETWORK_EXTERNAL_IPV4/$NETWORK_IPV4/g" "$CFG"
-sed -i "s/NETWORK_EXTERNAL_IPV6/$NETWORK_IPV6/g" "$CFG"
-sed -i "s/IPV6_BINDING_ENABLED/$IPV6_BINDING_ENABLED/g" "$CFG"
-sed -i "s/IPV6_BINDING_INTERFACE/$IPV6_BINDING_INTERFACE/g" "$CFG"
-sed -i "s/IPV6_POOL_START/$IPV6_POOL_START/g" "$CFG"
+replace_config_var "SERVER_PORT" "$SERVER_PORT"
+replace_config_var "PUBLIC_NETWORK_IP_ADDRESS" "$EXTERNAL_IP"
+replace_config_var "API_ACCESS_HASH" "$API_HASH"
+replace_config_var "IPV6_NAT_SUPPORT" "$IPV6_NAT_SUPPORT"
+replace_config_var "NETWORK_EXTERNAL_INTERFACE" "$NETWORK_INTERFACE"
+replace_config_var "NETWORK_EXTERNAL_IPV4" "$NETWORK_IPV4"
+replace_config_var "NETWORK_EXTERNAL_IPV6" "$NETWORK_IPV6"
+replace_config_var "IPV6_BINDING_ENABLED" "$IPV6_BINDING_ENABLED"
+replace_config_var "IPV6_BINDING_INTERFACE" "$IPV6_BINDING_INTERFACE"
+replace_config_var "IPV6_POOL_START" "$IPV6_POOL_START"
 
 cat > "$SERVICE" <<EOF
 [Unit]
@@ -218,6 +228,7 @@ echo
 ok "安装/升级完成"
 echo "数据目录: $DIR"
 echo "外网IP: $EXTERNAL_IP"
+echo "API端口: $SERVER_PORT"
 echo "API Hash: $API_HASH"
 echo "服务状态信息:"
 systemctl status $NAME --no-pager
