@@ -178,6 +178,21 @@ function lxdserver_ConfigOptions()
             'key'         => 'udp_enabled',
             'options'     => ['false' => '禁用 (推荐)', 'true' => '启用'],
         ],
+        'ipv6_limit' => [
+            'type'        => 'text',
+            'name'        => 'IPv6独立绑定数量',
+            'description' => '容器可使用的IPv6独立地址数量限制',
+            'default'     => '1',
+            'key'         => 'ipv6_limit',
+        ],
+        'ipv6_enabled' => [
+            'type'        => 'dropdown',
+            'name'        => 'IPv6独立绑定功能',
+            'description' => '是否启用IPv6独立绑定功能',
+            'default'     => 'false',
+            'key'         => 'ipv6_enabled',
+            'options'     => ['false' => '禁用', 'true' => '启用'],
+        ],
 
     ];
 }
@@ -250,10 +265,18 @@ function lxdserver_TestLink($params)
 // 定义客户区域的页面
 function lxdserver_ClientArea($params)
 {
-    return [
-        'info'    => ['name' => '产品信息'],
-        'nat_acl' => ['name' => 'NAT转发'],
+    $pages = [
+        'info'     => ['name' => '产品信息'],
+        'nat_acl'  => ['name' => 'NAT转发'],
     ];
+    
+    // 检查是否启用IPv6功能
+    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
+    if ($ipv6_enabled) {
+        $pages['ipv6_acl'] = ['name' => 'IPv6绑定'];
+    }
+    
+    return $pages;
 }
 
 // 处理客户区域页面的内容和API请求
@@ -277,6 +300,7 @@ function lxdserver_ClientAreaOutput($params, $key)
             'gettraffic' => '/api/traffic',
             'getinfoall' => '/api/info',
             'natlist'    => '/api/natlist',
+            'ipv6list'   => '/api/ipv6/list',
         ];
 
         $apiEndpoint = $apiEndpoints[$action] ?? '';
@@ -344,13 +368,37 @@ function lxdserver_ClientAreaOutput($params, $key)
             ],
         ];
     }
+
+    if ($key == 'ipv6_acl') {
+        $requestData = [
+            'url'  => '/api/ipv6/list?hostname=' . $params['domain'] . '&_t=' . time(),
+            'type' => 'application/x-www-form-urlencoded',
+            'data' => [],
+        ];
+        $res = lxdserver_Curl($params, $requestData, 'GET');
+
+        $ipv6_limit = intval($params['configoptions']['ipv6_limit'] ?? 1);
+        $current_count = lxdserver_getIPv6BindingCount($params);
+
+        return [
+            'template' => 'templates/ipv6.html',
+            'vars'     => [
+                'list' => $res['data'] ?? [],
+                'msg'  => $res['msg'] ?? '',
+                'ipv6_limit' => $ipv6_limit,
+                'current_count' => $current_count,
+                'remaining_count' => max(0, $ipv6_limit - $current_count),
+                'container_name' => $params['domain'],
+            ],
+        ];
+    }
 }
 
 // 定义允许客户端调用的函数
 function lxdserver_AllowFunction()
 {
     return [
-        'client' => ['natadd', 'natdel', 'natlist'],
+        'client' => ['natadd', 'natdel', 'natlist', 'ipv6add', 'ipv6del', 'ipv6list'],
     ];
 }
 
@@ -593,6 +641,7 @@ function lxdserver_natadd($params)
     $dport = intval($post['dport'] ?? 0);
     $sport = intval($post['sport'] ?? 0);
     $dtype = strtolower(trim($post['dtype'] ?? ''));
+    $description = trim($post['description'] ?? '');
     $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'false') === 'true';
 
     // 验证协议类型
@@ -618,6 +667,11 @@ function lxdserver_natadd($params)
 
     // 由后端自动分配外网端口，不接受前端传入的dport
     $requestData = 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($dtype) . '&sport=' . $sport;
+    
+    // 如果有描述，添加到请求中
+    if (!empty($description)) {
+        $requestData .= '&description=' . urlencode($description);
+    }
 
     $data = [
         'url'  => '/api/addport',
@@ -952,16 +1006,16 @@ function lxdserver_TransformAPIResponse($action, $response)
                             'disk' => $data['config']['disk'] ?? '10240 MB',
                             'traffic_limit' => $data['config']['traffic_limit'] ?? 0,
                         ],
-                        'cpu_usage' => $data['usage']['cpu_usage'] ?? 0,
-                        'memory_usage' => $data['usage']['memory_usage'] ?? '0 B',
-                        'memory_usage_raw' => $data['usage']['memory_usage_raw'] ?? 0,
-                        'disk_usage' => $data['usage']['disk_usage'] ?? '0 B',
-                        'disk_usage_raw' => $data['usage']['disk_usage_raw'] ?? 0,
-                        'traffic_usage' => $data['usage']['traffic_usage'] ?? '0 B',
-                        'traffic_usage_raw' => $data['usage']['traffic_usage_raw'] ?? 0,
-                        'cpu_percent' => $data['usage_percent']['cpu_percent'] ?? 0,
-                        'memory_percent' => $data['usage_percent']['memory_percent'] ?? 0,
-                        'disk_percent' => $data['usage_percent']['disk_percent'] ?? 0,
+                        'cpu_usage' => $data['cpu_usage'] ?? 0,
+                        'memory_usage' => $data['memory_usage'] ?? '0 B',
+                        'memory_usage_raw' => $data['memory_usage_raw'] ?? 0,
+                        'disk_usage' => $data['disk_usage'] ?? '0 B',
+                        'disk_usage_raw' => $data['disk_usage_raw'] ?? 0,
+                        'traffic_usage' => $data['traffic_usage'] ?? '0 B',
+                        'traffic_usage_raw' => $data['traffic_usage_raw'] ?? 0,
+                        'cpu_percent' => $data['cpu_percent'] ?? 0,
+                        'memory_percent' => $data['memory_percent'] ?? 0,
+                        'disk_percent' => $data['disk_percent'] ?? 0,
                         'last_update' => date('Y-m-d H:i:s'),
                         'timestamp' => time(),
                     ]
@@ -1085,5 +1139,119 @@ function lxdserver_TrafficReset($params)
         return ['status' => 'success', 'msg' => $res['msg'] ?? '流量统计已重置'];
     } else {
         return ['status' => 'error', 'msg' => $res['msg'] ?? '流量重置失败'];
+    }
+}
+
+// 获取IPv6绑定数量
+function lxdserver_getIPv6BindingCount($params)
+{
+    $data = [
+        'url'  => '/api/ipv6/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200 && isset($res['data']) && is_array($res['data'])) {
+        return count($res['data']);
+    }
+
+    return 0;
+}
+
+// 添加IPv6独立绑定
+function lxdserver_ipv6add($params)
+{
+    // 检查是否启用IPv6功能
+    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
+    if (!$ipv6_enabled) {
+        return ['status' => 'error', 'msg' => 'IPv6独立绑定功能未启用，请联系管理员启用此功能。'];
+    }
+    
+    parse_str(file_get_contents("php://input"), $post);
+
+    $description = trim($post['description'] ?? '');
+
+    // 检查IPv6绑定数量限制
+    $ipv6_limit = intval($params['configoptions']['ipv6_limit'] ?? 1);
+    $current_count = lxdserver_getIPv6BindingCount($params);
+    
+    if ($current_count >= $ipv6_limit) {
+        return ['status' => 'error', 'msg' => "IPv6绑定数量已达到限制（{$ipv6_limit}个），无法添加更多绑定"];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&description=' . urlencode($description);
+
+    $data = [
+        'url'  => '/api/ipv6/add',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'POST');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? 'IPv6绑定添加成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? 'IPv6绑定添加失败'];
+    }
+}
+
+// 删除IPv6独立绑定
+function lxdserver_ipv6del($params)
+{
+    // 检查是否启用IPv6功能
+    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
+    if (!$ipv6_enabled) {
+        return ['status' => 'error', 'msg' => 'IPv6独立绑定功能未启用，请联系管理员启用此功能。'];
+    }
+    
+    parse_str(file_get_contents("php://input"), $post);
+
+    $public_ipv6 = trim($post['public_ipv6'] ?? '');
+
+    if (empty($public_ipv6)) {
+        return ['status' => 'error', 'msg' => '缺少IPv6地址参数'];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&public_ipv6=' . urlencode($public_ipv6);
+
+    $data = [
+        'url'  => '/api/ipv6/delete',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'POST');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? 'IPv6绑定删除成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? 'IPv6绑定删除失败'];
+    }
+}
+
+// 获取IPv6绑定列表
+function lxdserver_ipv6list($params)
+{
+    // 检查是否启用IPv6功能
+    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
+    if (!$ipv6_enabled) {
+        return ['status' => 'error', 'data' => [], 'msg' => 'IPv6独立绑定功能未启用，请联系管理员启用此功能。'];
+    }
+    
+    $data = [
+        'url'  => '/api/ipv6/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded', 
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'data' => $res['data'] ?? [], 'msg' => $res['msg'] ?? ''];
+    } else {
+        return ['status' => 'error', 'data' => [], 'msg' => $res['msg'] ?? '获取IPv6绑定列表失败'];
     }
 }
