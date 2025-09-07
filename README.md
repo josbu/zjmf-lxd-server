@@ -2,36 +2,31 @@
 
 这是一个为 [魔方财务](https://www.zjmf.com/) (ZJMF) 系统开发的 LXD 对接插件，为主机商提供完整的 LXD 容器销售与管理解决方案。
 
-## 📖 文档
-
 **详细的安装和使用文档，请参考 [项目 Wiki](https://github.com/xkatld/zjmf-lxd-server/wiki)。**
 
-## 🚀 项目特色
+## 项目特色
 
-- **高性能后端**: 使用 Go 语言开发的独立后端服务，支持多架构部署
-- **完整功能**: 容器创建、管理、监控、流量统计、VNC 控制台等
-- **安全可靠**: API 认证、HTTPS 加密、权限控制
-- **易于集成**: 与魔方财务系统无缝对接，支持自动化销售流程
+- 高性能Go后端服务 - 完整的容器管理功能 - IPv6独立绑定支持 - NAT端口转发（IPv4/IPv6双栈） - 流量监控与统计 - Web VNC控制台 - 安全的API认证 - 与魔方财务系统无缝集成
 
-## 新版本计划
+## 版本功能计划
 
-- 全面适配ipv6
-- 添加nginx反代理功能
-- 优化前端显示
-- 适配mysql数据库
-- 开发管理后端web
+- ✅ 核心容器管理 - ✅ NAT端口转发 - ✅ IPv6独立绑定 - ✅ 流量监控与统计 - ✅ VNC控制台访问 - ✅ 安全与认证 - ✅ 系统集成 - ✅ 前端界面优化
+- 🔲 数据库支持扩展 - 🔲 反向代理功能 - 🔲 管理后台
 
-## 🏗️ 项目结构
-
-```
-├── lxd-api-go/          # Go 后端服务
-└── lxdserver/           # PHP 前端插件
-```
 
 ## 项目截图
 
-<img width="1627" height="822" alt="image" src="https://github.com/user-attachments/assets/3ebffd81-2d6a-4ef5-b514-c59db4e0d32d" />
-<img width="1624" height="819" alt="image" src="https://github.com/user-attachments/assets/3ec609da-e8c7-4a34-afcd-15329bf8880a" />
-<img width="1243" height="902" alt="image" src="https://github.com/user-attachments/assets/f28f8354-6143-498e-a170-05d2b585c873" />
-<img width="742" height="375" alt="image" src="https://github.com/user-attachments/assets/0c2fd90e-8c53-478b-9849-e38f1c621721" />
-<img width="1639" height="828" alt="image" src="https://github.com/user-attachments/assets/d36dcdc0-0fe8-4310-b39f-920c9c9dce6c" />
+info页面
+<img width="1637" height="829" alt="image" src="https://github.com/user-attachments/assets/286f159a-2471-44a9-ad66-c152482cd5a2" />
+
+nat页面
+<img width="1150" height="534" alt="image" src="https://github.com/user-attachments/assets/4ba28cc5-1d3d-45a8-9e1b-9ecb28294389" /><img width="518" height="593" alt="image" src="https://github.com/user-attachments/assets/9cc5e287-e275-4f6a-8813-e5d056c61f38" />
+
+ipv6页面
+<img width="1162" height="514" alt="image" src="https://github.com/user-attachments/assets/a8caea46-b6d3-4a05-8d7e-33d465d910a5" /><img width="534" height="428" alt="image" src="https://github.com/user-attachments/assets/3972edcd-b8ac-435a-adac-c215aaa5494d" />
+
+vnc页面
+<img width="1276" height="907" alt="image" src="https://github.com/user-attachments/assets/ed1aae23-9f8e-4c7b-a8cc-da77ea0acd13" />
+
+商品配置页面
+<img width="1183" height="616" alt="image" src="https://github.com/user-attachments/assets/6f0ba5ff-cf36-4eb0-a593-3f767a8d6d56" />
