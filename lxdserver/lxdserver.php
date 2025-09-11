@@ -34,8 +34,8 @@ function lxdserver_ConfigOptions()
         'image' => [
             'type'        => 'text',
             'name'        => '镜像',
-            'description' => '容器镜像名称, 如: debian/12',
-            'default'     => 'debian/12',
+            'description' => '容器镜像名称',
+            'default'     => 'debian12',
             'key'         => 'image',
         ],
         'cpus' => [
