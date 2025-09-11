@@ -86,7 +86,7 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
 fi
 
 apt update -y
-apt install -y curl wget unzip openssl xxd systemd || err "依赖安装失败"
+apt install -y curl wget unzip openssl xxd systemd iptables-persistent || err "依赖安装失败"
 
 systemctl stop $NAME 2>/dev/null || true
 
