@@ -86,7 +86,7 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
 fi
 
 apt update -y
-apt install -y curl wget unzip openssl xxd systemd iptables-persistent || err "依赖安装失败"
+apt install -y curl wget unzip openssl xxd systemd || err "依赖安装失败"
 
 systemctl stop $NAME 2>/dev/null || true
 
@@ -150,39 +150,98 @@ read -p "API 端口 [$DEFAULT_PORT]: " SERVER_PORT
 SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
 
 echo
-echo "网络配置选项："
-read -p "是否启用IPv6 NAT支持? (y/N): " IPV6_NAT_INPUT
-if [[ $IPV6_NAT_INPUT == "y" || $IPV6_NAT_INPUT == "Y" ]]; then
-  IPV6_NAT_SUPPORT="true"
-else
-  IPV6_NAT_SUPPORT="false"
-fi
+echo "==== 网络配置向导 ===="
+echo "请选择网络模式:"
+echo "1. IPv4 NAT (基础模式)"
+echo "2. IPv4 NAT + IPv6 NAT (双栈 NAT)"
+echo "3. IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
+echo "4. IPv4 NAT + IPv6 独立绑定 (混合模式)"
+echo "5. IPv6 独立绑定 (纯 IPv6 模式)"
+echo
+read -p "请选择网络模式 [1-5]: " NETWORK_MODE
 
-read -p "是否启用分配独立IPv6功能? (y/N): " IPV6_BINDING_INPUT
-if [[ $IPV6_BINDING_INPUT == "y" || $IPV6_BINDING_INPUT == "Y" ]]; then
-  IPV6_BINDING_ENABLED="true"
-  
-  read -p "分配IPv6绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
-  IPV6_BINDING_INTERFACE=${IPV6_BINDING_INTERFACE:-$DEFAULT_INTERFACE}
-  
-  read -p "分配IPv6地址池起始地址: " IPV6_POOL_START
-else
-  IPV6_BINDING_ENABLED="false"
-  IPV6_BINDING_INTERFACE=""
-  IPV6_POOL_START=""
-fi
+# 验证用户输入
+while [[ ! $NETWORK_MODE =~ ^[1-5]$ ]]; do
+  echo "无效选择，请输入 1-5 之间的数字"
+  read -p "请选择网络模式 [1-5]: " NETWORK_MODE
+done
 
+# 根据选择设置网络配置
+case $NETWORK_MODE in
+  1)
+    # IPv4 NAT only
+    NAT_SUPPORT="true"
+    IPV6_NAT_SUPPORT="false"
+    IPV6_BINDING_ENABLED="false"
+    echo "已选择: IPv4 NAT (基础模式)"
+    ;;
+  2)
+    # IPv4 NAT + IPv6 NAT
+    NAT_SUPPORT="true"
+    IPV6_NAT_SUPPORT="true"
+    IPV6_BINDING_ENABLED="false"
+    echo "已选择: IPv4 NAT + IPv6 NAT (双栈 NAT)"
+    ;;
+  3)
+    # IPv4 NAT + IPv6 NAT + IPv6 Binding
+    NAT_SUPPORT="true"
+    IPV6_NAT_SUPPORT="true"
+    IPV6_BINDING_ENABLED="true"
+    echo "已选择: IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
+    ;;
+  4)
+    # IPv4 NAT + IPv6 Binding
+    NAT_SUPPORT="true"
+    IPV6_NAT_SUPPORT="false"
+    IPV6_BINDING_ENABLED="true"
+    echo "已选择: IPv4 NAT + IPv6 独立绑定 (混合模式)"
+    ;;
+  5)
+    # IPv6 Binding only
+    NAT_SUPPORT="false"
+    IPV6_NAT_SUPPORT="false"
+    IPV6_BINDING_ENABLED="true"
+    echo "已选择: IPv6 独立绑定 (纯 IPv6 模式)"
+    ;;
+esac
+
+echo
+echo "==== 网络接口配置 ===="
 read -p "外网网卡接口 [$DEFAULT_INTERFACE]: " NETWORK_INTERFACE
 NETWORK_INTERFACE=${NETWORK_INTERFACE:-$DEFAULT_INTERFACE}
 
-read -p "外网IPv4地址 [$DEFAULT_IPV4]: " NETWORK_IPV4
-NETWORK_IPV4=${NETWORK_IPV4:-$DEFAULT_IPV4}
+# 根据NAT_SUPPORT配置IPv4
+if [[ $NAT_SUPPORT == "true" ]]; then
+  read -p "外网IPv4地址 [$DEFAULT_IPV4]: " NETWORK_IPV4
+  NETWORK_IPV4=${NETWORK_IPV4:-$DEFAULT_IPV4}
+else
+  NETWORK_IPV4=""
+fi
 
+# 根据IPV6_NAT_SUPPORT配置IPv6 NAT
 if [[ $IPV6_NAT_SUPPORT == "true" ]]; then
   read -p "外网IPv6地址 [$DEFAULT_IPV6]: " NETWORK_IPV6
   NETWORK_IPV6=${NETWORK_IPV6:-$DEFAULT_IPV6}
 else
   NETWORK_IPV6=""
+fi
+
+# 根据IPV6_BINDING_ENABLED配置IPv6绑定
+if [[ $IPV6_BINDING_ENABLED == "true" ]]; then
+  echo
+  echo "==== IPv6 独立绑定配置 ===="
+  read -p "IPv6绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
+  IPV6_BINDING_INTERFACE=${IPV6_BINDING_INTERFACE:-$DEFAULT_INTERFACE}
+  
+  while [[ -z "$IPV6_POOL_START" ]]; do
+    read -p "IPv6地址池起始地址 (如: 2001:db8::1000): " IPV6_POOL_START
+    if [[ -z "$IPV6_POOL_START" ]]; then
+      echo "IPv6地址池起始地址不能为空，请重新输入"
+    fi
+  done
+else
+  IPV6_BINDING_INTERFACE=""
+  IPV6_POOL_START=""
 fi
 
 replace_config_var() {
@@ -192,6 +251,7 @@ replace_config_var() {
   sed -i "s/\${$placeholder}/$escaped_value/g" "$CFG"
 }
 
+replace_config_var "NAT_SUPPORT" "$NAT_SUPPORT"
 replace_config_var "SERVER_PORT" "$SERVER_PORT"
 replace_config_var "PUBLIC_NETWORK_IP_ADDRESS" "$EXTERNAL_IP"
 replace_config_var "API_ACCESS_HASH" "$API_HASH"
