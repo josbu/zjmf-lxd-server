@@ -268,6 +268,12 @@ function lxdserver_ClientAreaOutput($params, $key)
             exit;
         }
 
+        if ($action === 'natcheck') {
+            header('Content-Type: application/json');
+            echo json_encode(lxdserver_natcheck($params));
+            exit;
+        }
+
         $apiEndpoints = [
             'getinfo'    => '/api/status',
             'getstats'   => '/api/info',
@@ -378,7 +384,7 @@ function lxdserver_ClientAreaOutput($params, $key)
 function lxdserver_AllowFunction()
 {
     return [
-        'client' => ['natadd', 'natdel', 'natlist', 'ipv6add', 'ipv6del', 'ipv6list'],
+        'client' => ['natadd', 'natdel', 'natlist', 'natcheck', 'ipv6add', 'ipv6del', 'ipv6list'],
     ];
 }
 
@@ -640,6 +646,23 @@ function lxdserver_natadd($params)
     }
 
     $requestData = 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($dtype) . '&sport=' . $sport;
+
+    if ($dport > 0) {
+        if ($dport < 10000 || $dport > 65535) {
+            return ['status' => 'error', 'msg' => '外网端口范围为10000-65535'];
+        }
+        $checkData = [
+            'url'  => '/api/nat/check?hostname=' . urlencode($params['domain']) . '&protocol=' . urlencode($dtype) . '&port=' . $dport,
+            'type' => 'application/x-www-form-urlencoded',
+            'data' => [],
+        ];
+        $checkRes = lxdserver_Curl($params, $checkData, 'GET');
+        if (!isset($checkRes['code']) || $checkRes['code'] != 200 || empty($checkRes['data']['available'])) {
+            $reason = $checkRes['data']['reason'] ?? $checkRes['msg'] ?? '端口不可用';
+            return ['status' => 'error', 'msg' => $reason];
+        }
+        $requestData .= '&dport=' . $dport;
+    }
     
     if (!empty($description)) {
         $requestData .= '&description=' . urlencode($description);
@@ -857,8 +880,7 @@ function lxdserver_Curl($params, $data = [], $request = 'POST')
 
     lxdserver_debug('发送请求', [
         'url' => $url,
-        'method' => $request,
-        'secure' => $isSecure
+        'method' => $request
     ]);
 
     $postFields = ($request === 'POST' || $request === 'PUT') ? ($data['data'] ?? null) : null;
@@ -1012,6 +1034,96 @@ function lxdserver_natlist($params)
     if ($res === null) {
         return ['code' => 500, 'msg' => '连接API服务器失败', 'data' => []];
     }
+    return $res;
+}
+
+function lxdserver_natcheck($params)
+{
+    // 先尝试从URL查询参数获取
+    $dport = intval($_GET['dport'] ?? 0);
+    $dtype = strtolower(trim($_GET['dtype'] ?? ''));
+    $hostname = trim($_GET['hostname'] ?? '');
+
+    // 如果GET参数为空，尝试从POST获取
+    if ($dport <= 0) {
+        $dport = intval($_POST['dport'] ?? 0);
+    }
+    if (empty($dtype)) {
+        $dtype = strtolower(trim($_POST['dtype'] ?? 'tcp'));
+    }
+    if (empty($hostname)) {
+        $hostname = trim($_POST['hostname'] ?? '');
+    }
+
+    // 如果还是为空，尝试从原始POST数据解析
+    if ($dport <= 0 || empty($hostname)) {
+        $postRaw = file_get_contents("php://input");
+        if (!empty($postRaw)) {
+            parse_str($postRaw, $input);
+            if ($dport <= 0) {
+                $dport = intval($input['dport'] ?? 0);
+            }
+            if (empty($dtype)) {
+                $dtype = strtolower(trim($input['dtype'] ?? 'tcp'));
+            }
+            if (empty($hostname)) {
+                $hostname = trim($input['hostname'] ?? '');
+            }
+        }
+    }
+
+    // 如果hostname还是空，使用params中的domain
+    if (empty($hostname)) {
+        $hostname = trim($params['domain'] ?? '');
+    }
+
+    lxdserver_debug('natcheck参数解析', [
+        'dport' => $dport, 
+        'dtype' => $dtype, 
+        'hostname' => $hostname,
+        'GET' => $_GET,
+        'POST' => $_POST,
+        'raw_input' => file_get_contents("php://input"),
+        'params_domain' => $params['domain'] ?? 'null'
+    ]);
+
+    // 参数验证
+    if ($dport <= 0) {
+        return ['code' => 400, 'msg' => '缺少端口参数', 'data' => ['available' => false, 'reason' => '缺少端口参数']];
+    }
+    if (!in_array($dtype, ['tcp', 'udp'])) {
+        return ['code' => 400, 'msg' => '协议类型错误', 'data' => ['available' => false, 'reason' => '协议类型错误']];
+    }
+    if ($dport < 10000 || $dport > 65535) {
+        return ['code' => 400, 'msg' => '端口范围为10000-65535', 'data' => ['available' => false, 'reason' => '端口范围为10000-65535']];
+    }
+    if (empty($hostname)) {
+        return ['code' => 400, 'msg' => '容器标识缺失', 'data' => ['available' => false, 'reason' => '容器标识缺失']];
+    }
+
+    // 使用GET请求调用后端API
+    $queryParams = http_build_query([
+        'hostname' => $hostname,
+        'protocol' => $dtype,
+        'port'     => $dport,
+    ]);
+
+    $requestData = [
+        'url'  => '/api/nat/check?' . $queryParams,
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => '',
+    ];
+
+    $res = lxdserver_Curl($params, $requestData, 'GET');
+
+    if ($res === null) {
+        return ['code' => 500, 'msg' => '连接服务器失败', 'data' => ['available' => false, 'reason' => '连接服务器失败']];
+    }
+
+    if (!isset($res['code'])) {
+        return ['code' => 500, 'msg' => '服务器返回无效数据', 'data' => ['available' => false, 'reason' => '服务器返回无效数据']];
+    }
+
     return $res;
 }
 
