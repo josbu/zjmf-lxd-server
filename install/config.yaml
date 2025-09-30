@@ -1,0 +1,97 @@
+# LXD API 服务配置文件
+
+# 系统配置
+system:
+  server:
+    port: ${SERVER_PORT}                    # API服务端口
+    mode: release                          # 运行模式: debug | release
+    tls:
+      cert_file: "server.crt"               # SSL证书文件
+      key_file: "server.key"                # SSL私钥文件
+      auto_gen: true                        # 自动生成自签证书
+      server_ips:
+        - "${PUBLIC_NETWORK_IP_ADDRESS}"     # 服务器外网IP
+  security:
+    api_hash: "${API_ACCESS_HASH}"            # API访问密钥
+    enable_log: false                        # 启用认证日志
+  database:
+    type: "${DB_TYPE}"                       # 数据库类型: sqlite | mysql
+    enable_log: false                        # 数据库操作日志
+    
+    # SQLite配置（当type=sqlite时生效）
+    sqlite_path: "lxdapi.db"                 # SQLite数据库文件路径
+    
+    # MySQL配置（当type=mysql时生效）
+    mysql_host: "${DB_MYSQL_HOST}"           # MySQL服务器地址
+    mysql_port: ${DB_MYSQL_PORT}             # MySQL端口
+    mysql_user: "${DB_MYSQL_USER}"           # MySQL用户名
+    mysql_password: "${DB_MYSQL_PASSWORD}"   # MySQL密码
+    mysql_database: "${DB_MYSQL_DATABASE}"   # MySQL数据库名
+    mysql_charset: "utf8mb4"                 # 字符集
+    
+    # 连接池配置（MySQL专用，SQLite忽略）
+    max_idle_conns: 10                       # 最大空闲连接数
+    max_open_conns: 100                      # 最大打开连接数
+    conn_max_lifetime: 3600                  # 连接最大生存时间（秒）
+    
+    # 向后兼容
+    path: "lxdapi.db"                        # 兼容旧配置
+  lxc:
+    verbose: false                           # LXC命令详细日志
+  cors:
+    allow_origins: ["*"]                      # 跨域访问源（生产环境建议限制）
+    allow_credentials: true                   # 允许携带凭证
+
+# 任务状态查询
+task_status:
+  enable_log: false                           # 任务状态日志
+  retention_hours: 168                        # 数据保留时间（小时）
+
+# 容器管理接口
+container_api:
+  enable_log: false                           # 容器操作日志
+  storage_pools: [${STORAGE_POOLS}]          # 存储池列表
+
+# 容器状态查询
+container_status:
+  enable_log: false                           # 状态查询日志
+
+# 流量统计
+traffic_api:
+  interval: 5                                 # 统计间隔（秒）
+  enable_log: false                           # 流量统计日志
+  limit_check:
+    check_interval: 5                         # 限制检测间隔（秒）
+    enable_log: false                         # 限制检测日志
+  auto_reset:
+    check_interval: 360                       # 自动重置检查间隔（秒）
+    enable_log: false                         # 重置日志
+
+# NAT端口转发
+nat_api:
+  enabled: ${NAT_SUPPORT}                  # NAT功能总开关
+  enable_log: false                           # NAT操作日志
+  ipv6_support: ${IPV6_NAT_SUPPORT}          # IPv6 NAT支持开关
+  network:
+    external_interface: "${NETWORK_EXTERNAL_INTERFACE}"   # 外网网卡
+    external_ips: ["${NETWORK_EXTERNAL_IPV4}"]         # 外网IPv4地址列表
+    external_ipv6s: ["${NETWORK_EXTERNAL_IPV6}"]       # 外网IPv6地址列表
+    internal_interface: "lxdbr0"               # 内网网卡
+  container_ip:
+    preferred_interfaces: ["eth0"]              # 优先网卡
+    ignored_interfaces: ["docker0", "br-"]     # 忽略网卡
+
+# Web控制台
+console_api:
+  enable_log: false                            # 控制台日志
+  session_timeout: 1800                        # 会话超时（秒）
+
+# IPv6独立绑定
+ipv6_binding:
+  enabled: ${IPV6_BINDING_ENABLED}             # IPv6绑定功能总开关
+  enable_log: false                             # IPv6绑定操作日志
+  interface: "${IPV6_BINDING_INTERFACE}"       # IPv6绑定网卡接口
+  ipv6_pool:
+    start: "${IPV6_POOL_START}"                # IPv6地址池起始地址
+    prefix_length: 64                            # IPv6前缀长度
+    pool_size: 9999                              # 地址池大小
