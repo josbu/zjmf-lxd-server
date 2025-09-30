@@ -15,8 +15,27 @@ system:
     api_hash: "${API_ACCESS_HASH}"            # API访问密钥
     enable_log: false                        # 启用认证日志
   database:
-    path: "lxdapi.db"                        # 数据库文件路径
+    type: "${DB_TYPE}"                       # 数据库类型: sqlite | mysql
     enable_log: false                        # 数据库操作日志
+    
+    # SQLite配置（当type=sqlite时生效）
+    sqlite_path: "lxdapi.db"                 # SQLite数据库文件路径
+    
+    # MySQL配置（当type=mysql时生效）
+    mysql_host: "${DB_MYSQL_HOST}"           # MySQL服务器地址
+    mysql_port: ${DB_MYSQL_PORT}             # MySQL端口
+    mysql_user: "${DB_MYSQL_USER}"           # MySQL用户名
+    mysql_password: "${DB_MYSQL_PASSWORD}"   # MySQL密码
+    mysql_database: "${DB_MYSQL_DATABASE}"   # MySQL数据库名
+    mysql_charset: "utf8mb4"                 # 字符集
+    
+    # 连接池配置（MySQL专用，SQLite忽略）
+    max_idle_conns: 10                       # 最大空闲连接数
+    max_open_conns: 100                      # 最大打开连接数
+    conn_max_lifetime: 3600                  # 连接最大生存时间（秒）
+    
+    # 向后兼容
+    path: "lxdapi.db"                        # 兼容旧配置
   lxc:
     verbose: false                           # LXC命令详细日志
   cors:
@@ -31,6 +50,7 @@ task_status:
 # 容器管理接口
 container_api:
   enable_log: false                           # 容器操作日志
+  storage_pools: [${STORAGE_POOLS}]          # 存储池列表
 
 # 容器状态查询
 container_status:
