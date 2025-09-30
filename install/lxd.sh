@@ -88,7 +88,7 @@ case $arch in
         ;;
 esac
 
-if command -v lxd &> /dev/null && [[ $FORCE != true ]]; then
+if command -v snap &> /dev/null && snap list lxd &> /dev/null && [[ $FORCE != true ]]; then
     warn "LXD 已安装，使用 -f 参数强制重新安装"
     lxd --version 2>/dev/null || echo "版本信息获取失败"
     exit 0
