@@ -424,14 +424,6 @@ function lxdserver_CreateAccount($params)
     if (isset($res['code']) && $res['code'] == '200') {
         $dedicatedip_value = $params['server_ip'];
 
-        if (!empty($res['data']['ssh_port'])) {
-            $ssh_port = $res['data']['ssh_port'];
-            $dedicatedip_value = $params['server_ip'] . ':' . $ssh_port;
-            lxdserver_debug('获取到SSH端口', ['ssh_port' => $ssh_port]);
-        } else {
-            lxdserver_debug('警告：响应中没有SSH端口信息', $res);
-        }
-
         $update = [
             'dedicatedip'  => $dedicatedip_value,
             'domainstatus' => 'Active',
@@ -439,7 +431,11 @@ function lxdserver_CreateAccount($params)
         ];
 
         if (!empty($res['data']['ssh_port'])) {
-            $update['port'] = $res['data']['ssh_port'];
+            $ssh_port = $res['data']['ssh_port'];
+            $update['port'] = $ssh_port;
+            lxdserver_debug('获取到SSH端口', ['ssh_port' => $ssh_port]);
+        } else {
+            lxdserver_debug('警告：响应中没有SSH端口信息', $res);
         }
 
         try {
@@ -469,14 +465,16 @@ function lxdserver_Sync($params)
         if (class_exists('think\Db') && isset($params['hostid'])) {
             try {
                 $dedicatedip_value = $params['server_ip'];
+                
+                $update_data = [
+                    'dedicatedip' => $dedicatedip_value,
+                ];
 
                 if (isset($res['data']['ssh_port']) && !empty($res['data']['ssh_port'])) {
-                    $dedicatedip_value = $params['server_ip'] . ':' . $res['data']['ssh_port'];
+                    $update_data['port'] = $res['data']['ssh_port'];
                 }
 
-                Db::name('host')->where('id', $params['hostid'])->update([
-                    'dedicatedip' => $dedicatedip_value,
-                ]);
+                Db::name('host')->where('id', $params['hostid'])->update($update_data);
             } catch (Exception $e) {
                 lxdserver_debug('同步数据库失败', ['error' => $e->getMessage()]);
             }
