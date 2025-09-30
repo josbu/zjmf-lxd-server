@@ -129,10 +129,14 @@ warn "需要手动初始化 LXD，请运行以下命令："
 echo -e "${YELLOW}lxd init${NC}"
 echo
 info "初始化建议:"
-echo "- Ubuntu 系统推荐选择 zfs 存储后端"
-echo "- Debian 系统推荐选择 btrfs 存储后端"
+echo "- 系统推荐选择 btrfs 存储后端"
 echo "- 存储池大小根据实际需求设置"
 echo "- 网络配置可以使用默认设置"
+echo
+info "性能优化建议:"
+echo "- 关闭调试日志以提升性能并减少日志占用："
+echo -e "  ${YELLOW}sudo snap set lxd daemon.debug=false${NC}"
+echo -e "  ${YELLOW}sudo snap restart lxd${NC}"
 echo
 
 ok "安装完成！请按照提示进行初始化，详细教程：https://github.com/xkatld/zjmf-lxd-server/wiki"
