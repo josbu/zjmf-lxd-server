@@ -61,7 +61,7 @@ if [[ -f /etc/os-release ]]; then
     case $ID in
         ubuntu)
             info "检测到系统: Ubuntu $VERSION_ID"
-            RECOMMENDED_STORAGE="zfs"
+            RECOMMENDED_STORAGE="btrfs"
             ;;
         debian)
             info "检测到系统: Debian $VERSION_ID"
@@ -97,20 +97,35 @@ fi
 info "更新软件包列表..."
 apt update -y || err "软件包更新失败"
 
-info "安装系统依赖..."
-apt install -y snapd || err "snapd 安装失败"
-
-info "启用 snapd 服务..."
-systemctl enable --now snapd || err "snapd 服务启用失败"
-
-info "等待 snapd 服务就绪..."
-sleep 3
+if ! command -v snap &> /dev/null; then
+    info "安装 snapd..."
+    apt install -y snapd || err "snapd 安装失败"
+    
+    info "启用 snapd 服务..."
+    systemctl enable --now snapd || err "snapd 服务启用失败"
+    
+    info "等待 snapd 服务就绪..."
+    sleep 5
+else
+    info "snapd 已安装，检查服务状态..."
+    systemctl is-active --quiet snapd || {
+        info "启动 snapd 服务..."
+        systemctl start snapd || err "snapd 服务启动失败"
+        sleep 3
+    }
+fi
 
 info "安装 LXD..."
 if [[ $FORCE == true ]]; then
-    snap install lxd --force-dangerous 2>/dev/null || snap install lxd || err "LXD 安装失败"
+    snap install lxd --force-dangerous 2>/dev/null || snap install lxd || {
+        warn "snap安装失败，尝试使用apt安装..."
+        apt install -y lxd || err "LXD 安装失败"
+    }
 else
-    snap install lxd || err "LXD 安装失败"
+    if ! snap install lxd 2>/dev/null; then
+        warn "snap安装失败，尝试使用apt安装..."
+        apt install -y lxd || err "LXD 安装失败"
+    fi
 fi
 
 if ! command -v lxd &> /dev/null; then
