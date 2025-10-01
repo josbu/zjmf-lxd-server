@@ -1,50 +1,42 @@
 #!/bin/bash
+# 安装 LXD（默认版本 6.5）
+# 用法: ./install-lxd.sh [VERSION]
 
-LXD_VERSION="6.5"
+VERSION="${1:-6.5}"
 INSTALL_DIR="/usr/local/bin"
 SERVICE_FILE="/etc/systemd/system/lxd.service"
 
-set -u
-
-log() {
-    echo "[INFO] $*"
-}
-
-error() {
-    echo "[ERROR] $*" >&2
-}
+log() { echo "[INFO] $*"; }
+err() { echo "[ERROR] $*" >&2; }
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    x86_64)
-        URL="https://github.com/canonical/lxd/releases/download/lxd-${LXD_VERSION}/bin.linux.lxd.x86_64"
-        ;;
-    aarch64)
-        URL="https://github.com/canonical/lxd/releases/download/lxd-${LXD_VERSION}/bin.linux.lxd.aarch64"
-        ;;
-    *)
-        error "不支持的架构: $ARCH"
-        exit 1
-        ;;
+    x86_64)   FILE="bin.linux.lxc.x86_64" ;;
+    aarch64)  FILE="bin.linux.lxc.aarch64" ;;
+    *)        err "未知架构: $ARCH"; exit 1 ;;
 esac
 
+URL="https://github.com/canonical/lxd/releases/download/lxd-${VERSION}/${FILE}"
 log "架构: $ARCH"
-log "下载 LXD ${LXD_VERSION} from $URL"
+log "下载 LXD ${VERSION} from $URL"
 
-wget -qO lxd "$URL" || error "下载失败"
-chmod +x lxd 2>/dev/null || error "赋权失败"
-mv -f lxd "${INSTALL_DIR}/lxd" 2>/dev/null || error "移动文件失败"
-
-log "安装依赖包"
-apt update -y || error "apt update 失败"
-apt install -y uidmap dnsmasq-base rsync iptables || error "依赖安装失败"
-
-if ! getent group lxd >/dev/null; then
-    groupadd --system lxd || error "创建 lxd 组失败"
-    log "已创建 lxd 用户组"
+# 下载
+if ! curl -L -o lxd "$URL"; then
+    err "下载失败 $URL"
+else
+    chmod +x lxd && mv -f lxd "${INSTALL_DIR}/lxd" || err "安装二进制失败"
 fi
 
-log "配置 systemd 服务"
+# 安装依赖
+apt update -y || err "apt update 失败"
+apt install -y uidmap dnsmasq-base rsync iptables || err "依赖安装失败"
+
+# 添加 lxd group
+if ! getent group lxd >/dev/null; then
+    groupadd --system lxd || err "创建 lxd 组失败"
+fi
+
+# systemd service
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=LXD container hypervisor
@@ -62,10 +54,10 @@ LimitCORE=infinity
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload || error "systemctl daemon-reload 失败"
-systemctl enable --now lxd || error "启动 LXD 服务失败"
+systemctl daemon-reload || err "daemon-reload 失败"
+systemctl enable --now lxd || err "启动 LXD 服务失败"
 
 log "安装完成"
-lxd --version || error "检查版本失败"
+lxd --version || err "无法检查版本"
 
 log "初始化请执行: sudo lxd init"
