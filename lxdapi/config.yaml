@@ -58,14 +58,17 @@ container_status:
 
 # 流量统计
 traffic_api:
-  interval: 5                                 # 统计间隔（秒）
-  enable_log: false                           # 流量统计日志
+  interval: 5                     # 统计间隔（秒）
+  batch_size: 10                  # 每次轮询处理的容器数量
+  enable_log: false               # 流量统计日志
   limit_check:
-    check_interval: 5                         # 限制检测间隔（秒）
-    enable_log: false                         # 限制检测日志
+    check_interval: 5             # 限制检测间隔（秒）
+    batch_size: 10                # 每次检查处理的容器数量
+    enable_log: false             # 限制检测日志
   auto_reset:
-    check_interval: 360                       # 自动重置检查间隔（秒）
-    enable_log: false                         # 重置日志
+    check_interval: 360           # 自动重置检查间隔（秒）
+    batch_size: 10                # 每次重置检查处理的容器数量
+    enable_log: false             # 重置日志
 
 # NAT端口转发
 nat_api:
