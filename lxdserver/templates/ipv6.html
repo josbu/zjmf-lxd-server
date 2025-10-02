@@ -267,7 +267,6 @@
         </div>
     </div>
 
-    <!-- 添加IPv6绑定模态框 -->
     <div class="modal fade" id="addIPv6Modal" tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -352,7 +351,6 @@ $(document).ready(function() {
     if (containerId) {
         currentContainerId = containerId;
         fetchIPv6List();
-        // 定时30秒刷新
         setInterval(fetchIPv6List, 30000);
     }
 });
@@ -384,10 +382,8 @@ function fetchIPv6List() {
                     $empty.hide();
                     $listContainer.show();
                     
-                    // 先显示加载状态
                     $tbody.html('<tr class="loading-row"><td colspan="4" class="text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>更新中...</td></tr>');
                     
-                    // 延迟显示实际数据，增加动画效果
                     setTimeout(function() {
                         let html = '';
                         list.forEach(function(item) {
@@ -395,7 +391,6 @@ function fetchIPv6List() {
                             const status = item.status || 'active';
                             const description = item.description || '';
                             
-                            // 状态显示
                             let statusBadge;
                             if (status === 'active') {
                                 statusBadge = '<span class="status-badge status-active"><i class="fas fa-check-circle mr-1"></i>正常</span>';
@@ -403,12 +398,10 @@ function fetchIPv6List() {
                                 statusBadge = '<span class="status-badge status-inactive"><i class="fas fa-exclamation-triangle mr-1"></i>异常</span>';
                             }
                             
-                            // 描述信息显示 - 优化：没有填写时自动生成有意义的描述
                             let descriptionDisplay = '';
                             if (description && description.trim() !== '') {
                                 descriptionDisplay = '<div class="description-text" title="' + description + '">' + description + '</div>';
                             } else {
-                                // 自动生成描述：根据IPv6地址特征生成
                                 const ipv6Short = publicIPv6.includes('::') ? publicIPv6 : publicIPv6.substring(0, 20) + '...';
                                 const autoDescription = `独立IPv6地址 (${ipv6Short})`;
                                 descriptionDisplay = '<div class="description-text text-muted" title="' + autoDescription + '" style="font-style: italic;">' + autoDescription + '</div>';
@@ -423,13 +416,12 @@ function fetchIPv6List() {
                         });
                         $tbody.html(html);
                         updateIPv6Counters(list.length);
-                    }, 300); // 300ms延迟，让用户看到加载效果
+                    }, 300);
                 }
             }
         },
         error: function(xhr, status, error) {
             console.error('IPv6列表获取失败:', error);
-            // 错误处理
         }
     });
 }
@@ -458,7 +450,6 @@ function updateIPv6Counters(count) {
 function copyToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function() {
-            // 使用SweetAlert2显示成功消息
             Swal.fire({
                 type: 'success',
                 title: '复制成功',
@@ -467,11 +458,9 @@ function copyToClipboard(text) {
                 showConfirmButton: false
             });
         }).catch(function() {
-            // 复制失败的备用方案
             fallbackCopyTextToClipboard(text);
         });
     } else {
-        // 不支持现代剪贴板API的备用方案
         fallbackCopyTextToClipboard(text);
     }
 }

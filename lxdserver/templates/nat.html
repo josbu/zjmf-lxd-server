@@ -510,11 +510,10 @@ var MODULE_API_URL = "{$MODULE_CUSTOM_API}";
 var currentContainerName = '';
 var natLimit = {$nat_limit};
 var currentCount = {$current_count};
-// UDP支持配置
 {if $udp_enabled}
-var udpEnabled = true; // UDP已启用
+var udpEnabled = true;
 {else}
-var udpEnabled = false; // UDP已禁用
+var udpEnabled = false;
 {/if}
 
 var portCheckLock = false;
@@ -534,7 +533,6 @@ $(document).ready(function() {
     fetchNATList();
     setInterval(fetchNATList, 30000);
     
-    // 初始化协议选择器（只在UDP启用时）
     if (udpEnabled) {
         $('.nokvmprotocollxdserveracl').selectFilter({});
     }
@@ -661,7 +659,6 @@ function fetchNATList() {
                     updateNATCounters(list.length);
                 }
             } else {
-                // 数据格式错误，显示空状态
                 $listContainer.hide();
                 $empty.show();
                 updateNATCounters(0);
@@ -712,7 +709,6 @@ function closeAddModal() {
         if (formEl) formEl.reset();
         clearExternalPortFeedback();
         
-        // 重置协议选择器（只在UDP启用时）
         if (udpEnabled) {
             var $selectProtocol = $('.nokvmprotocollxdserveracl');
             var $options = $selectProtocol.find('select option');
@@ -836,8 +832,7 @@ $('.confirm-btnlxdserveracl').on('click', function () {
         }
     }
 
-    // 校验协议类型
-    let dtypeVal = 'tcp'; // 默认TCP
+    let dtypeVal = 'tcp';
     if (udpEnabled) {
         const dtypeSelect = document.querySelector("select[name='dtype']");
         dtypeVal = dtypeSelect ? dtypeSelect.value : 'tcp';
@@ -933,7 +928,6 @@ function ajax(options) {
     var method = options.type ? options.type.toUpperCase() : "GET";
     var url = options.url;
 
-    // 注意：natcheck现在使用jQuery的$.ajax直接调用，不再使用这个自定义ajax函数
 
     if (method === "GET") {
         xhr.open("get", url + "?" + str);
@@ -1020,7 +1014,6 @@ function triggerPortCheck() {
 
     const protocol = udpEnabled ? (document.querySelector("select[name='dtype']")?.value || 'tcp') : 'tcp';
     
-    // 参考其他功能的实现，直接构造URL并使用jQuery的ajax
     const timestamp = new Date().getTime();
     const natCheckUrl = `/provision/custom/content?id=${currentContainerId}&key=nat_acl&action=natcheck&dport=${port}&dtype=${protocol}&hostname=${encodeURIComponent(currentContainerName)}&_t=${timestamp}&_=${timestamp - 1000}`;
 
