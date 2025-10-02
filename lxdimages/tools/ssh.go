@@ -207,14 +207,14 @@ func ConfigureSSH(containerName, distro string) error {
 func getBaseToolsCommands(distro string) []string {
 	switch distro {
 	case "alpine":
-		return []string{"apk add -q curl wget nano vim"}
+		return []string{"apk add -q curl wget nano procps"}
 	case "amazonlinux", "centos", "fedora", "rhel", "almalinux", "rockylinux", "oraclelinux":
-		return []string{"if command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano vim; else yum install -y curl wget nano vim; fi"}
+		return []string{"if command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano procps-ng; else yum install -y curl wget nano procps-ng; fi"}
 	case "ubuntu", "debian":
-		return []string{"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano vim"}
+		return []string{"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano procps"}
 	case "opensuse":
-		return []string{"zypper install -y curl wget nano vim"}
+		return []string{"zypper install -y curl wget nano procps"}
 	default:
-		return []string{"if command -v apk >/dev/null 2>&1; then apk add -q curl wget nano vim; elif command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano vim; elif command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano vim; elif command -v yum >/dev/null 2>&1; then yum install -y curl wget nano vim; fi"}
+		return []string{"if command -v apk >/dev/null 2>&1; then apk add -q curl wget nano procps; elif command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano procps; elif command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano procps-ng; elif command -v yum >/dev/null 2>&1; then yum install -y curl wget nano procps-ng; fi"}
 	}
 }
