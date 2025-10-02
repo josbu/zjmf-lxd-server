@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "header.html" .}}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">NAT 规则管理</h1>
+                <div class="flex items-center gap-3 mt-1">
+                    <p class="text-gray-600">管理所有端口转发规则</p>
+                    <div id="natSyncStatusIndicator" class="hidden">
+                        <span class="flex items-center gap-2 text-sm text-blue-600">
+                            <span class="loading loading-spinner loading-xs"></span>
+                            <span id="natSyncStatusText">正在同步中...</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="loadRules()" class="btn-action bg-gray-500 hover:bg-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span>刷新页面</span>
+                </button>
+                <button onclick="syncAllRules()" id="syncAllNATBtn" class="btn-action bg-green-500 hover:bg-green-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span>同步所有节点</span>
+                </button>
+                <button onclick="showNATSyncHistory()" class="btn-action bg-blue-500 hover:bg-blue-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>同步历史</span>
+                </button>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex flex-wrap gap-4 items-center">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">节点筛选:</label>
+                    <select id="nodeFilter" onchange="filterRules()" class="px-3 py-1 border border-gray-300 rounded-lg text-sm">
+                        <option value="">全部节点</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">协议筛选:</label>
+                    <select id="protocolFilter" onchange="filterRules()" class="px-3 py-1 border border-gray-300 rounded-lg text-sm">
+                        <option value="">全部协议</option>
+                        <option value="tcp">TCP</option>
+                        <option value="udp">UDP</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 flex-1">
+                    <label class="text-sm font-medium text-gray-700">搜索:</label>
+                    <input type="text" id="searchInput" oninput="filterRules()" placeholder="容器名称或端口" class="px-3 py-1 border border-gray-300 rounded-lg text-sm flex-1 max-w-xs">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-700">每页:</label>
+                    <select id="pageSize" onchange="changePageSize()" class="px-3 py-1 border border-gray-300 rounded-lg text-sm">
+                        <option value="25">25条</option>
+                        <option value="50" selected>50条</option>
+                        <option value="100">100条</option>
+                        <option value="300">300条</option>
+                    </select>
+                </div>
+                <div class="flex gap-6 ml-auto">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-800" id="totalCount">0</div>
+                        <div class="text-xs text-gray-500">总规则</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-blue-600" id="tcpCount">0</div>
+                        <div class="text-xs text-gray-500">TCP</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-purple-600" id="udpCount">0</div>
+                        <div class="text-xs text-gray-500">UDP</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow">
+            <div class="p-6">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra">
+                        <thead>
+                            <tr>
+                                <th>容器</th>
+                                <th>节点</th>
+                                <th>外网端口</th>
+                                <th>内网端口</th>
+                                <th>协议</th>
+                                <th>说明</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="natTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 分页控件 -->
+            <div class="border-t px-6 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-gray-600">
+                        显示第 <span id="pageStartNum">0</span> - <span id="pageEndNum">0</span> 条，共 <span id="filteredCount">0</span> 条
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="goToPage(1)" class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="firstPageBtn">
+                            首页
+                        </button>
+                        <button onclick="goToPage(currentPage - 1)" class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="prevPageBtn">
+                            上一页
+                        </button>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600">第</span>
+                            <input type="number" id="pageInput" min="1" value="1" class="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded" onkeypress="handlePageInputEnter(event)">
+                            <span class="text-sm text-gray-600">/ <span id="totalPages">1</span> 页</span>
+                            <button onclick="goToInputPage()" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                                跳转
+                            </button>
+                        </div>
+                        <button onclick="goToPage(currentPage + 1)" class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="nextPageBtn">
+                            下一页
+                        </button>
+                        <button onclick="goToPage(totalPagesCount)" class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed" id="lastPageBtn">
+                            末页
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        /* 统一按钮样式 */
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: white;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        
+        .btn-action:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-action svg {
+            flex-shrink: 0;
+        }
+        
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out;
+        }
+    </style>
+    <script>
+        let nodes = [];
+        let allRules = [];
+        let filteredRules = [];
+        let containers = {};
+        let currentPage = 1;
+        let pageSize = 50;
+        let totalPagesCount = 1;
+        
+        $(document).ready(function() {
+            loadNodes();
+            loadRules();
+        });
+        function renderRules(rules) {
+            filteredRules = rules;
+            
+            // 计算总页数
+            totalPagesCount = Math.ceil(rules.length / pageSize);
+            if (totalPagesCount === 0) totalPagesCount = 1;
+            
+            // 确保当前页不超过总页数
+            if (currentPage > totalPagesCount) {
+                currentPage = totalPagesCount;
+            }
+            
+            // 更新统计信息
+            updateStats(rules);
+            
+            // 更新分页信息
+            updatePaginationInfo(rules.length);
+            
+            // 计算当前页数据
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, rules.length);
+            const pageRules = rules.slice(startIndex, endIndex);
+            
+            if (pageRules.length === 0) {
+                $('#natTableBody').html('<tr><td colspan="7" class="text-center text-gray-500">暂无NAT规则</td></tr>');
+                return;
+            }
+            
+            const rows = pageRules.map(rule => {
+                const protocolBadge = rule.protocol === 'tcp' 
+                    ? '<span class="badge badge-info badge-sm">TCP</span>' 
+                    : '<span class="badge badge-primary badge-sm">UDP</span>';
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td>
+                            <div class="font-semibold text-gray-800">${rule.container_hostname}</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-outline badge-sm">${getNodeName(rule.node_id)}</span>
+                        </td>
+                        <td>
+                            <code class="text-sm bg-blue-50 px-2 py-1 rounded font-semibold">${rule.external_port}</code>
+                        </td>
+                        <td>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">${rule.internal_port}</code>
+                        </td>
+                        <td>${protocolBadge}</td>
+                        <td class="text-sm text-gray-600">${rule.description || '-'}</td>
+                        <td>
+                            <button onclick="deleteRule(${rule.id})" class="px-3 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition">删除</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            $('#natTableBody').html(rows);
+        }
+        
+        function updatePaginationInfo(totalCount) {
+            const startNum = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+            const endNum = Math.min(currentPage * pageSize, totalCount);
+            
+            $('#pageStartNum').text(startNum);
+            $('#pageEndNum').text(endNum);
+            $('#filteredCount').text(totalCount);
+            $('#totalPages').text(totalPagesCount);
+            $('#pageInput').val(currentPage);
+            $('#pageInput').attr('max', totalPagesCount);
+            
+            // 更新按钮状态
+            $('#firstPageBtn, #prevPageBtn').prop('disabled', currentPage === 1);
+            $('#nextPageBtn, #lastPageBtn').prop('disabled', currentPage === totalPagesCount);
+        }
+        
+        function changePageSize() {
+            pageSize = parseInt($('#pageSize').val());
+            currentPage = 1;
+            renderRules(filteredRules);
+        }
+        
+        function goToPage(page) {
+            if (page < 1 || page > totalPagesCount) return;
+            currentPage = page;
+            renderRules(filteredRules);
+            // 平滑滚动到表格顶部
+            $('html, body').animate({
+                scrollTop: $('.bg-white.rounded-lg.shadow').offset().top - 100
+            }, 300);
+        }
+        
+        function goToInputPage() {
+            const page = parseInt($('#pageInput').val());
+            if (!isNaN(page)) {
+                goToPage(page);
+            }
+        }
+        
+        function handlePageInputEnter(event) {
+            if (event.keyCode === 13) {
+                goToInputPage();
+            }
+        }
+        function updateStats(rules) {
+            const total = rules.length;
+            const tcp = rules.filter(r => r.protocol === 'tcp').length;
+            const udp = rules.filter(r => r.protocol === 'udp').length;
+            $('#totalCount').text(total);
+            $('#tcpCount').text(tcp);
+            $('#udpCount').text(udp);
+        }
+        function filterRules() {
+            const nodeFilter = $('#nodeFilter').val();
+            const protocolFilter = $('#protocolFilter').val();
+            const searchText = $('#searchInput').val().toLowerCase();
+            let filtered = allRules;
+            if (nodeFilter) {
+                filtered = filtered.filter(r => r.node_id == nodeFilter);
+            }
+            if (protocolFilter) {
+                filtered = filtered.filter(r => r.protocol === protocolFilter);
+            }
+            if (searchText) {
+                filtered = filtered.filter(r => 
+                    r.container_hostname.toLowerCase().includes(searchText) ||
+                    r.external_port.toString().includes(searchText) ||
+                    r.internal_port.toString().includes(searchText)
+                );
+            }
+            currentPage = 1; // 筛选后重置到第一页
+            renderRules(filtered);
+        }
+        function getNodeName(nodeId) {
+            const node = nodes.find(n => n.id === nodeId);
+            return node ? node.name : '未知节点';
+        }
+        function loadNodes() {
+            $.get('/api/nodes', function(result) {
+                if (result.code === 200) {
+                    nodes = result.data;
+                    const activeNodes = nodes.filter(n => n.status === 'active');
+                    const filterOptions = '<option value="">全部节点</option>' + 
+                        nodes.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+                    $('#nodeFilter').html(filterOptions);
+                }
+            });
+        }
+        $('#natNodeId').on('change', function() {
+            const nodeId = $(this).val();
+            if (!nodeId) {
+                $('#natContainerName').html('<option value="">请先选择节点</option>');
+                return;
+            }
+            $.get('/api/containers', function(result) {
+                if (result.code === 200) {
+                    const nodeContainers = result.data.filter(c => c.node_id == nodeId);
+                    const options = '<option value="">请选择容器</option>' + 
+                        nodeContainers.map(c => `<option value="${c.hostname}">${c.hostname} (${c.status})</option>`).join('');
+                    $('#natContainerName').html(options);
+                }
+            });
+        });
+        function loadRules() {
+            $('#natTableBody').html('<tr><td colspan="7" class="text-center"><span class="loading loading-spinner loading-md"></span> 从缓存加载中...</td></tr>');
+            $.get('/api/nat/cache', function(result) {
+                if (result.code === 200) {
+                    allRules = result.data || [];
+                    console.log('加载到的NAT规则:', allRules);
+                    currentPage = 1;
+                    filterRules();
+                } else {
+                    $('#natTableBody').html(`<tr><td colspan="7" class="text-center text-error">加载失败: ${result.msg}</td></tr>`);
+                }
+            }).fail(function() {
+                $('#natTableBody').html('<tr><td colspan="7" class="text-center text-error">加载失败</td></tr>');
+            });
+        }
+        function deleteRule(id) {
+            if (!confirm('确定要删除这条NAT规则吗？')) return;
+            $.ajax({
+                url: `/api/nat/${id}`,
+                method: 'DELETE',
+                success: function(result) {
+                    if (result.code === 200) {
+                        alert('删除成功');
+                        loadRules();
+                    } else {
+                        alert('删除失败: ' + result.msg);
+                    }
+                },
+                error: function() {
+                    alert('删除失败');
+                }
+            });
+        }
+        function syncAllRules() {
+            if (!confirm('确定要同步所有节点的NAT规则吗？\n\n此操作将从各节点获取最新的NAT规则。')) {
+                return;
+            }
+            
+            const $btn = $('#syncAllNATBtn');
+            const originalHtml = $btn.html();
+            $btn.html('<span class="loading loading-spinner loading-xs"></span> 同步中...').prop('disabled', true);
+            
+            $.ajax({
+                url: '/api/nat-sync/all',
+                type: 'POST',
+                contentType: 'application/json',
+                success: function(result) {
+                    if (result.code === 200) {
+                        showToast('success', result.msg || 'NAT同步任务已启动');
+                        // 3秒后开始轮询状态
+                        setTimeout(() => {
+                            startNATSyncStatusPolling();
+                        }, 3000);
+                    } else {
+                        showToast('error', result.msg || '同步启动失败');
+                        $btn.html(originalHtml).prop('disabled', false);
+                    }
+                },
+                error: function(xhr) {
+                    showToast('error', '同步启动失败，请检查网络连接');
+                    $btn.html(originalHtml).prop('disabled', false);
+                }
+            });
+        }
+        
+        let natSyncStatusInterval = null;
+        
+        function startNATSyncStatusPolling() {
+            $('#natSyncStatusIndicator').removeClass('hidden');
+            
+            if (natSyncStatusInterval) {
+                clearInterval(natSyncStatusInterval);
+            }
+            
+            natSyncStatusInterval = setInterval(() => {
+                $.get('/api/nat-sync/status', function(result) {
+                    if (result.code === 200) {
+                        const statuses = result.data || [];
+                        const syncing = statuses.some(s => s.syncing);
+                        
+                        if (syncing) {
+                            const syncingNodes = statuses.filter(s => s.syncing).map(s => s.node_name).join(', ');
+                            $('#natSyncStatusText').text(`正在同步: ${syncingNodes}`);
+                        } else {
+                            // 同步完成
+                            clearInterval(natSyncStatusInterval);
+                            natSyncStatusInterval = null;
+                            $('#natSyncStatusIndicator').addClass('hidden');
+                            $('#syncAllNATBtn').html(`
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                <span>同步所有节点</span>
+                            `).prop('disabled', false);
+                            
+                            showToast('success', 'NAT规则同步完成！正在刷新数据...');
+                            loadRules();
+                        }
+                    }
+                });
+            }, 2000);
+        }
+        
+        function showNATSyncHistory() {
+            $.get('/api/nat-sync/tasks', function(result) {
+                if (result.code === 200) {
+                    const tasks = result.data || [];
+                    
+                    let html = `
+                        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeModal(event)">
+                            <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-auto m-4" onclick="event.stopPropagation()">
+                                <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+                                    <h2 class="text-2xl font-bold text-gray-800">NAT规则同步历史</h2>
+                                    <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                                </div>
+                                <div class="p-6">
+                    `;
+                    
+                    if (tasks.length === 0) {
+                        html += '<p class="text-center text-gray-500 py-8">暂无同步记录</p>';
+                    } else {
+                        html += '<div class="space-y-4">';
+                        tasks.forEach(task => {
+                            const statusBadge = {
+                                'completed': '<span class="badge badge-success badge-sm">成功</span>',
+                                'failed': '<span class="badge badge-error badge-sm">失败</span>',
+                                'running': '<span class="badge badge-info badge-sm">运行中</span>',
+                                'pending': '<span class="badge badge-ghost badge-sm">等待中</span>'
+                            };
+                            
+                            const startTime = task.start_time ? new Date(task.start_time).toLocaleString('zh-CN') : '-';
+                            const duration = (task.start_time && task.end_time) 
+                                ? `${Math.round((new Date(task.end_time) - new Date(task.start_time)) / 1000)}秒`
+                                : '-';
+                            
+                            html += `
+                                <div class="border rounded-lg p-4 hover:bg-gray-50">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <div>
+                                            <span class="font-semibold text-gray-800">${task.node_name}</span>
+                                            ${statusBadge[task.status] || statusBadge.pending}
+                                        </div>
+                                        <span class="text-xs text-gray-500">${startTime}</span>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-4 text-sm mt-3">
+                                        <div>
+                                            <div class="text-gray-500 text-xs">总数</div>
+                                            <div class="font-semibold">${task.total_count}</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-gray-500 text-xs">成功</div>
+                                            <div class="font-semibold text-green-600">${task.success_count}</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-gray-500 text-xs">失败</div>
+                                            <div class="font-semibold text-red-600">${task.failed_count}</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-gray-500 text-xs">耗时</div>
+                                            <div class="font-semibold">${duration}</div>
+                                        </div>
+                                    </div>
+                                    ${task.error_message ? `<div class="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">${task.error_message}</div>` : ''}
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                    }
+                    
+                    html += `
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    $('body').append(html);
+                } else {
+                    showToast('error', '获取同步历史失败');
+                }
+            });
+        }
+        
+        function closeModal(event) {
+            if (event) event.stopPropagation();
+            $('.fixed.inset-0').remove();
+        }
+        
+        function showToast(type, message) {
+            const colors = {
+                'success': 'bg-green-600',
+                'error': 'bg-red-600',
+                'info': 'bg-blue-600'
+            };
+            
+            const toast = $(`
+                <div class="fixed top-4 right-4 ${colors[type] || colors.info} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in">
+                    ${message}
+                </div>
+            `);
+            
+            $('body').append(toast);
+            
+            setTimeout(() => {
+                toast.fadeOut(300, function() { $(this).remove(); });
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
