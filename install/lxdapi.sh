@@ -163,6 +163,7 @@ elif [[ -d "$DIR" ]]; then
   backup_database
 fi
 mkdir -p "$DIR"
+mkdir -p "$DIR/backups"
 
 TMP=$(mktemp -d)
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
@@ -491,8 +492,6 @@ ExecStart=$DIR/$BIN
 Restart=always
 RestartSec=5
 Environment=GIN_MODE=release
-StandardOutput=append:$DIR/$NAME.log
-StandardError=append:$DIR/$NAME.log
 
 [Install]
 WantedBy=multi-user.target

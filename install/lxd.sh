@@ -61,11 +61,11 @@ if [[ -f /etc/os-release ]]; then
     case $ID in
         ubuntu)
             info "检测到系统: Ubuntu $VERSION_ID"
-            RECOMMENDED_STORAGE="btrfs"
+            RECOMMENDED_STORAGE="lvm"
             ;;
         debian)
             info "检测到系统: Debian $VERSION_ID"
-            RECOMMENDED_STORAGE="btrfs"
+            RECOMMENDED_STORAGE="lvm"
             ;;
         *)
             err "不支持的系统类型: $ID，仅支持 Ubuntu 和 Debian"
@@ -117,12 +117,12 @@ fi
 
 info "安装 LXD..."
 if [[ $FORCE == true ]]; then
-    snap install lxd --force-dangerous 2>/dev/null || snap install lxd || {
+    snap install lxd --channel=latest/stable --force-dangerous 2>/dev/null || snap install lxd --channel=latest/stable || {
         warn "snap安装失败，尝试使用apt安装..."
         apt install -y lxd || err "LXD 安装失败"
     }
 else
-    if ! snap install lxd 2>/dev/null; then
+    if ! snap install lxd --channel=latest/stable 2>/dev/null; then
         warn "snap安装失败，尝试使用apt安装..."
         apt install -y lxd || err "LXD 安装失败"
     fi
@@ -132,26 +132,32 @@ if ! command -v lxd &> /dev/null; then
     err "LXD 安装失败: 命令不可用"
 fi
 
+info "执行性能优化配置..."
+snap set lxd daemon.debug=false 2>/dev/null || warn "性能优化配置失败，可能需要手动设置"
+
+info "重启 LXD 服务以应用优化配置..."
+snap restart lxd 2>/dev/null || warn "LXD 服务重启失败"
+
+info "等待 LXD 服务就绪..."
+sleep 3
+
 echo
 ok "LXD 安装完成！"
 echo "LXD 版本: $(lxd --version 2>/dev/null || echo '版本获取失败')"
 echo "推荐存储后端: $RECOMMENDED_STORAGE"
 echo "系统类型: $ID $VERSION_ID"
 echo "CPU架构: $arch"
+echo "性能优化: 已自动关闭调试日志"
+echo
+
+info "初始化建议:"
+echo "- 系统推荐选择 lvm 存储后端"
+echo "- 存储池大小根据实际需求设置"
+echo "- 网络配置可以使用默认设置"
 echo
 
 warn "需要手动初始化 LXD，请运行以下命令："
 echo -e "${YELLOW}lxd init${NC}"
-echo
-info "初始化建议:"
-echo "- 系统推荐选择 btrfs 存储后端"
-echo "- 存储池大小根据实际需求设置"
-echo "- 网络配置可以使用默认设置"
-echo
-info "性能优化建议:"
-echo "- 关闭调试日志以提升性能并减少日志占用："
-echo -e "  ${YELLOW}sudo snap set lxd daemon.debug=false${NC}"
-echo -e "  ${YELLOW}sudo snap restart lxd${NC}"
 echo
 
 ok "安装完成！请按照提示进行初始化，详细教程：https://github.com/xkatld/zjmf-lxd-server/wiki"
