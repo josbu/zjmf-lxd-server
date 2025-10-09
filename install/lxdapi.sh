@@ -615,10 +615,23 @@ replace_config_var() {
   sed -i "s/\${$placeholder}/$escaped_value/g" "$CFG"
 }
 
+# 自动获取CPU核心数作为worker_count
+CPU_CORES=$(nproc 2>/dev/null || echo "4")
+# 限制在合理范围内 (最少2个，最多16个)
+if [[ $CPU_CORES -lt 2 ]]; then
+  WORKER_COUNT=2
+elif [[ $CPU_CORES -gt 16 ]]; then
+  WORKER_COUNT=16
+else
+  WORKER_COUNT=$CPU_CORES
+fi
+info "检测到 CPU 核心数: $CPU_CORES，设置 Worker 数量为: $WORKER_COUNT"
+
 replace_config_var "SERVER_PORT" "$SERVER_PORT"
 replace_config_var "PUBLIC_NETWORK_IP_ADDRESS" "$EXTERNAL_IP"
 replace_config_var "API_ACCESS_HASH" "$API_HASH"
 replace_config_var "STORAGE_POOLS" "$STORAGE_POOLS"
+replace_config_var "WORKER_COUNT" "$WORKER_COUNT"
 
 replace_config_var "DB_TYPE" "$DB_TYPE"
 if [[ $DB_TYPE == "mysql" || $DB_TYPE == "mariadb" ]]; then
