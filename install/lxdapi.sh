@@ -16,6 +16,7 @@ DELETE=false
 log() { echo -e "$1"; }
 ok() { log "${GREEN}[OK]${NC} $1"; }
 info() { log "${BLUE}[INFO]${NC} $1"; }
+warn() { log "${YELLOW}[WARN]${NC} $1"; }
 err() { log "${RED}[ERR]${NC} $1"; exit 1; }
 
 [[ $EUID -ne 0 ]] && err "请使用 root 运行"
@@ -130,16 +131,16 @@ backup_database() {
   return 1
 }
 
-check_mysql_backup_warning() {
+check_db_backup_warning() {
   if [[ -f "$CFG" ]]; then
     local current_db_type=$(grep -E "^\s*type:" "$CFG" 2>/dev/null | sed 's/.*type:\s*["\x27]*\([^"\x27]*\)["\x27]*.*/\1/' | tr -d ' ')
-    if [[ "$current_db_type" == "mysql" ]]; then
+    if [[ "$current_db_type" == "mysql" || "$current_db_type" == "mariadb" || "$current_db_type" == "postgres" ]]; then
       echo
-      echo "• MySQL数据库需要您自行备份，请注意数据安全"
+      warn "$current_db_type 数据库需要您自行备份，请注意数据安全"
       echo
-      read -p "确认继续升级? (y/N): " MYSQL_UPGRADE_CONFIRM
-      if [[ $MYSQL_UPGRADE_CONFIRM != "y" && $MYSQL_UPGRADE_CONFIRM != "Y" ]]; then
-        echo "已取消升级，请先备份MySQL数据库"
+      read -p "确认继续升级? (y/N): " DB_UPGRADE_CONFIRM
+      if [[ $DB_UPGRADE_CONFIRM != "y" && $DB_UPGRADE_CONFIRM != "Y" ]]; then
+        echo "已取消升级，请先备份数据库"
         exit 0
       fi
     fi
@@ -148,7 +149,7 @@ check_mysql_backup_warning() {
 
 TMP_DB=$(mktemp -d)
 if [[ $UPGRADE == true ]]; then
-  check_mysql_backup_warning
+  check_db_backup_warning
   backup_database
   
   if [[ -f "$DIR/$DB_FILE" ]]; then
@@ -191,7 +192,7 @@ else
         
         ok "从压缩备份恢复数据库: $(basename "$latest_backup")"
       else
-        echo "${YELLOW}[WARNING]${NC} 解压备份文件失败: $(basename "$latest_backup")"
+        warn "解压备份文件失败: $(basename "$latest_backup")"
       fi
       
       rm -rf "$temp_restore_dir"
@@ -199,11 +200,6 @@ else
   fi
 fi
 rm -rf "$TMP_DB"
-
-
-DEFAULT_IP=$(curl -s 4.ipw.cn || echo "127.0.0.1")
-DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
-DEFAULT_PORT="8080"
 
 get_default_interface() {
   ip route | grep default | head -1 | awk '{print $5}' || echo "eth0"
@@ -222,104 +218,51 @@ get_interface_ipv6() {
 DEFAULT_INTERFACE=$(get_default_interface)
 DEFAULT_IPV4=$(get_interface_ipv4 "$DEFAULT_INTERFACE")
 DEFAULT_IPV6=$(get_interface_ipv6 "$DEFAULT_INTERFACE")
+DEFAULT_IP=$(curl -s 4.ipw.cn || echo "$DEFAULT_IPV4")
+DEFAULT_HASH=$(openssl rand -hex 8 | tr 'a-f' 'A-F')
+DEFAULT_PORT="8080"
 
-[[ -z "$DEFAULT_IPV4" ]] && DEFAULT_IPV4="$DEFAULT_IP"
-read -p "外网IP [$DEFAULT_IP]: " EXTERNAL_IP
+echo
+echo "========================================"
+echo "    LXD API 服务配置向导 - $VERSION"
+echo "========================================"
+echo
+
+echo "==== 步骤 1/4: 基础信息配置 ===="
+echo
+
+read -p "服务器外网 IP [$DEFAULT_IP]: " EXTERNAL_IP
 EXTERNAL_IP=${EXTERNAL_IP:-$DEFAULT_IP}
 
-read -p "API Hash [$DEFAULT_HASH]: " API_HASH
+read -p "API 访问密钥 [$DEFAULT_HASH]: " API_HASH
 API_HASH=${API_HASH:-$DEFAULT_HASH}
 
-read -p "API 端口 [$DEFAULT_PORT]: " SERVER_PORT
+read -p "API 服务端口 [$DEFAULT_PORT]: " SERVER_PORT
 SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
 
+ok "基础信息配置完成"
 echo
-echo "==== 数据库配置向导 ===="
-echo "请选择数据库类型："
-echo "1. SQLite (默认，轻量级，无需额外配置)"
-echo "2. MySQL 5.7+ (企业级，需要预先准备MySQL服务)"
-echo
-read -p "请选择数据库类型 [1-2]: " DB_TYPE_CHOICE
 
-while [[ ! $DB_TYPE_CHOICE =~ ^[1-2]$ ]]; do
-    echo "无效选择，请输入 1-2 之间的数字"
-    read -p "请选择数据库类型 [1-2]: " DB_TYPE_CHOICE
-done
-
-if [[ $DB_TYPE_CHOICE == "1" ]]; then
-    DB_TYPE="sqlite"
-    DB_SQLITE_PATH="lxdapi.db"
-    info "已选择 SQLite 数据库，数据库文件: lxdapi.db"
-else
-    DB_TYPE="mysql"
-    echo
-    echo "==== MySQL 数据库配置 ===="
-    echo "请确保 MySQL 服务已启动，并且已创建数据库和用户"
-    echo
-    echo "• MySQL数据库需要您自行备份，请注意数据安全"
-    echo
-    read -p "我已了解MySQL备份责任，确认继续? (y/N): " MYSQL_BACKUP_CONFIRM
-    if [[ $MYSQL_BACKUP_CONFIRM != "y" && $MYSQL_BACKUP_CONFIRM != "Y" ]]; then
-        echo "已取消MySQL配置，请先备份数据库后重新运行安装脚本"
-        exit 0
-    fi
-    echo
-    
-    read -p "MySQL 服务器地址 [localhost]: " DB_MYSQL_HOST
-    DB_MYSQL_HOST=${DB_MYSQL_HOST:-localhost}
-    
-    read -p "MySQL 端口 [3306]: " DB_MYSQL_PORT
-    DB_MYSQL_PORT=${DB_MYSQL_PORT:-3306}
-    
-    read -p "MySQL 用户名 [lxdapi]: " DB_MYSQL_USER
-    DB_MYSQL_USER=${DB_MYSQL_USER:-lxdapi}
-    
-    read -p "MySQL 密码: " DB_MYSQL_PASSWORD
-    while [[ -z "$DB_MYSQL_PASSWORD" ]]; do
-        echo "MySQL 密码不能为空"
-        read -p "MySQL 密码: " DB_MYSQL_PASSWORD
-    done
-    
-    read -p "MySQL 数据库名 [lxdapi]: " DB_MYSQL_DATABASE
-    DB_MYSQL_DATABASE=${DB_MYSQL_DATABASE:-lxdapi}
-    
-    
-    echo
-    info "正在测试 MySQL 连接..."
-    if command -v mysql >/dev/null 2>&1; then
-        if mysql -h"$DB_MYSQL_HOST" -P"$DB_MYSQL_PORT" -u"$DB_MYSQL_USER" -p"$DB_MYSQL_PASSWORD" -e "USE $DB_MYSQL_DATABASE;" 2>/dev/null; then
-            ok "MySQL 连接测试成功"
-        else
-            echo "[WARNING] MySQL 连接测试失败，请检查配置"
-            echo "继续安装，但请确保 MySQL 配置正确"
-        fi
-    else
-        echo "[WARNING] 未找到 mysql 客户端，跳过连接测试"
-    fi
-fi
-
-echo
-echo "==== 存储池配置向导 ===="
-echo "请配置 LXD 存储池（按优先级顺序尝试创建容器）"
+echo "==== 步骤 2/4: 存储池配置 ===="
 echo
 
 DETECTED_POOLS_LIST=$(lxc storage list --format csv 2>/dev/null | cut -d, -f1 | grep -v "^NAME$" | head -10)
 if [[ -n "$DETECTED_POOLS_LIST" ]]; then
-    echo "检测到的存储池："
-    echo "$DETECTED_POOLS_LIST" | sed 's/^/  - /'
+  echo "检测到的存储池："
+  echo "$DETECTED_POOLS_LIST" | sed 's/^/  - /'
 else
-    echo "未检测到存储池"
+  warn "未检测到存储池"
 fi
 echo
-echo "请选择存储池配置方式："
+echo "存储池配置方式："
 echo "1. 自动使用所有检测到的存储池"
 echo "2. 手动指定存储池列表"
 echo
-read -p "请选择配置方式 [1-2]: " STORAGE_MODE
+read -p "请选择 [1-2]: " STORAGE_MODE
 
 while [[ ! $STORAGE_MODE =~ ^[1-2]$ ]]; do
-    echo "无效选择，请输入 1-2 之间的数字"
-    read -p "请选择配置方式 [1-2]: " STORAGE_MODE
+  warn "无效选择，请输入 1 或 2"
+  read -p "请选择 [1-2]: " STORAGE_MODE
 done
 
 case $STORAGE_MODE in
@@ -334,10 +277,10 @@ case $STORAGE_MODE in
           STORAGE_POOLS="\"$pool\""
         fi
       done
-      echo "已自动配置存储池: $DETECTED_POOLS"
+      ok "已自动配置存储池: $DETECTED_POOLS"
     else
       STORAGE_POOLS="\"default\""
-      echo "未检测到存储池，使用默认配置: default"
+      warn "未检测到存储池，使用默认配置: default"
     fi
     ;;
   2)
@@ -353,17 +296,202 @@ case $STORAGE_MODE in
           STORAGE_POOLS="\"$pool\""
         fi
       done
-      echo "已手动配置存储池: $MANUAL_POOLS"
+      ok "已手动配置存储池: $MANUAL_POOLS"
     else
       STORAGE_POOLS="\"default\""
-      echo "输入为空，使用默认配置: default"
+      warn "输入为空，使用默认配置: default"
     fi
     ;;
 esac
-
 echo
-echo "==== 网络配置向导 ===="
-echo "请选择网络模式:"
+
+echo "==== 步骤 3/4: 数据库与队列后端组合 ===="
+echo
+echo "请选择数据库与任务队列后端组合："
+echo "1. SQLite + Database 队列 (默认，轻量级，无需额外配置)"
+echo "2. SQLite + Redis 队列 (SQLite存储 + Redis高性能队列)"
+echo "3. PostgreSQL + Redis 队列 (企业级方案)"
+echo "4. MySQL/MariaDB + Redis 队列 (传统企业级方案)"
+echo
+read -p "请选择组合 [1-4]: " DB_COMBO_CHOICE
+
+while [[ ! $DB_COMBO_CHOICE =~ ^[1-4]$ ]]; do
+  warn "无效选择，请输入 1-4"
+  read -p "请选择组合 [1-4]: " DB_COMBO_CHOICE
+done
+
+case $DB_COMBO_CHOICE in
+  1)
+    DB_TYPE="sqlite"
+    QUEUE_BACKEND="database"
+    ok "已选择: SQLite + Database 队列 (轻量级方案)"
+    REDIS_HOST=""
+    REDIS_PORT=""
+    REDIS_PASSWORD=""
+    ;;
+  2)
+    DB_TYPE="sqlite"
+    QUEUE_BACKEND="redis"
+    ok "已选择: SQLite + Redis 队列"
+    echo
+    echo "==== Redis 配置 ===="
+    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
+    REDIS_HOST=${REDIS_HOST:-localhost}
+    
+    read -p "Redis 端口 [6379]: " REDIS_PORT
+    REDIS_PORT=${REDIS_PORT:-6379}
+    
+    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    
+    if command -v redis-cli >/dev/null 2>&1; then
+      if [[ -n "$REDIS_PASSWORD" ]]; then
+        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" PING 2>/dev/null | grep -q PONG; then
+          ok "Redis 连接测试成功"
+        else
+          warn "Redis 连接测试失败，请检查配置"
+        fi
+      else
+        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" PING 2>/dev/null | grep -q PONG; then
+          ok "Redis 连接测试成功"
+        else
+          warn "Redis 连接测试失败，请检查配置"
+        fi
+      fi
+    else
+      warn "未找到 redis-cli 客户端，跳过连接测试"
+    fi
+    ;;
+  3)
+    DB_TYPE="postgres"
+    QUEUE_BACKEND="redis"
+    ok "已选择: PostgreSQL + Redis 队列"
+    echo
+    echo "==== PostgreSQL 配置 ===="
+    warn "PostgreSQL 数据库需要您自行备份，请注意数据安全"
+    echo
+    read -p "我已了解备份责任，确认继续? (y/N): " PG_BACKUP_CONFIRM
+    if [[ $PG_BACKUP_CONFIRM != "y" && $PG_BACKUP_CONFIRM != "Y" ]]; then
+      echo "已取消配置，请先备份数据库后重新运行安装脚本"
+      exit 0
+    fi
+    echo
+    
+    read -p "PostgreSQL 服务器地址 [localhost]: " DB_POSTGRES_HOST
+    DB_POSTGRES_HOST=${DB_POSTGRES_HOST:-localhost}
+    
+    read -p "PostgreSQL 端口 [5432]: " DB_POSTGRES_PORT
+    DB_POSTGRES_PORT=${DB_POSTGRES_PORT:-5432}
+    
+    read -p "PostgreSQL 用户名 [lxdapi]: " DB_POSTGRES_USER
+    DB_POSTGRES_USER=${DB_POSTGRES_USER:-lxdapi}
+    
+    read -p "PostgreSQL 密码: " DB_POSTGRES_PASSWORD
+    while [[ -z "$DB_POSTGRES_PASSWORD" ]]; do
+      warn "PostgreSQL 密码不能为空"
+      read -p "PostgreSQL 密码: " DB_POSTGRES_PASSWORD
+    done
+    
+    read -p "PostgreSQL 数据库名 [lxdapi]: " DB_POSTGRES_DATABASE
+    DB_POSTGRES_DATABASE=${DB_POSTGRES_DATABASE:-lxdapi}
+    
+    if command -v psql >/dev/null 2>&1; then
+      if PGPASSWORD="$DB_POSTGRES_PASSWORD" psql -h"$DB_POSTGRES_HOST" -p"$DB_POSTGRES_PORT" -U"$DB_POSTGRES_USER" -d"$DB_POSTGRES_DATABASE" -c "SELECT 1;" >/dev/null 2>&1; then
+        ok "PostgreSQL 连接测试成功"
+      else
+        warn "PostgreSQL 连接测试失败，请检查配置"
+      fi
+    else
+      warn "未找到 psql 客户端，跳过连接测试"
+    fi
+    
+    echo
+    echo "==== Redis 配置 ===="
+    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
+    REDIS_HOST=${REDIS_HOST:-localhost}
+    
+    read -p "Redis 端口 [6379]: " REDIS_PORT
+    REDIS_PORT=${REDIS_PORT:-6379}
+    
+    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    ;;
+  4)
+    QUEUE_BACKEND="redis"
+    echo
+    echo "请选择数据库类型："
+    echo "1. MySQL 5.7+"
+    echo "2. MariaDB 10.x+"
+    read -p "请选择 [1-2]: " MYSQL_TYPE
+    
+    while [[ ! $MYSQL_TYPE =~ ^[1-2]$ ]]; do
+      warn "无效选择，请输入 1 或 2"
+      read -p "请选择 [1-2]: " MYSQL_TYPE
+    done
+    
+    if [[ $MYSQL_TYPE == "1" ]]; then
+      DB_TYPE="mysql"
+      ok "已选择: MySQL + Redis 队列"
+    else
+      DB_TYPE="mariadb"
+      ok "已选择: MariaDB + Redis 队列"
+    fi
+    
+    echo
+    echo "==== $DB_TYPE 配置 ===="
+    warn "$DB_TYPE 数据库需要您自行备份，请注意数据安全"
+    echo
+    read -p "我已了解备份责任，确认继续? (y/N): " MYSQL_BACKUP_CONFIRM
+    if [[ $MYSQL_BACKUP_CONFIRM != "y" && $MYSQL_BACKUP_CONFIRM != "Y" ]]; then
+      echo "已取消配置，请先备份数据库后重新运行安装脚本"
+      exit 0
+    fi
+    echo
+    
+    read -p "$DB_TYPE 服务器地址 [localhost]: " DB_MYSQL_HOST
+    DB_MYSQL_HOST=${DB_MYSQL_HOST:-localhost}
+    
+    read -p "$DB_TYPE 端口 [3306]: " DB_MYSQL_PORT
+    DB_MYSQL_PORT=${DB_MYSQL_PORT:-3306}
+    
+    read -p "$DB_TYPE 用户名 [lxdapi]: " DB_MYSQL_USER
+    DB_MYSQL_USER=${DB_MYSQL_USER:-lxdapi}
+    
+    read -p "$DB_TYPE 密码: " DB_MYSQL_PASSWORD
+    while [[ -z "$DB_MYSQL_PASSWORD" ]]; do
+      warn "$DB_TYPE 密码不能为空"
+      read -p "$DB_TYPE 密码: " DB_MYSQL_PASSWORD
+    done
+    
+    read -p "$DB_TYPE 数据库名 [lxdapi]: " DB_MYSQL_DATABASE
+    DB_MYSQL_DATABASE=${DB_MYSQL_DATABASE:-lxdapi}
+    
+    if command -v mysql >/dev/null 2>&1; then
+      if mysql -h"$DB_MYSQL_HOST" -P"$DB_MYSQL_PORT" -u"$DB_MYSQL_USER" -p"$DB_MYSQL_PASSWORD" -e "USE $DB_MYSQL_DATABASE;" 2>/dev/null; then
+        ok "$DB_TYPE 连接测试成功"
+      else
+        warn "$DB_TYPE 连接测试失败，请检查配置"
+      fi
+    else
+      warn "未找到 mysql 客户端，跳过连接测试"
+    fi
+    
+    echo
+    echo "==== Redis 配置 ===="
+    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
+    REDIS_HOST=${REDIS_HOST:-localhost}
+    
+    read -p "Redis 端口 [6379]: " REDIS_PORT
+    REDIS_PORT=${REDIS_PORT:-6379}
+    
+    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    ;;
+esac
+
+ok "数据库与队列配置完成"
+echo
+
+echo "==== 步骤 4/4: 网络管理方案 ===="
+echo
+echo "请选择网络模式："
 echo "1. IPv4 NAT (基础模式)"
 echo "2. IPv4 NAT + IPv6 NAT (双栈 NAT)"
 echo "3. IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
@@ -373,7 +501,7 @@ echo
 read -p "请选择网络模式 [1-5]: " NETWORK_MODE
 
 while [[ ! $NETWORK_MODE =~ ^[1-5]$ ]]; do
-  echo "无效选择，请输入 1-5 之间的数字"
+  warn "无效选择，请输入 1-5"
   read -p "请选择网络模式 [1-5]: " NETWORK_MODE
 done
 
@@ -382,31 +510,31 @@ case $NETWORK_MODE in
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="false"
     IPV6_BINDING_ENABLED="false"
-    echo "已选择: IPv4 NAT (基础模式)"
+    ok "已选择: IPv4 NAT (基础模式)"
     ;;
   2)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="true"
     IPV6_BINDING_ENABLED="false"
-    echo "已选择: IPv4 NAT + IPv6 NAT (双栈 NAT)"
+    ok "已选择: IPv4 NAT + IPv6 NAT (双栈 NAT)"
     ;;
   3)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="true"
     IPV6_BINDING_ENABLED="true"
-    echo "已选择: IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
+    ok "已选择: IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
     ;;
   4)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="false"
     IPV6_BINDING_ENABLED="true"
-    echo "已选择: IPv4 NAT + IPv6 独立绑定 (混合模式)"
+    ok "已选择: IPv4 NAT + IPv6 独立绑定 (混合模式)"
     ;;
   5)
     NAT_SUPPORT="false"
     IPV6_NAT_SUPPORT="false"
     IPV6_BINDING_ENABLED="true"
-    echo "已选择: IPv6 独立绑定 (纯 IPv6 模式)"
+    ok "已选择: IPv6 独立绑定 (纯 IPv6 模式)"
     ;;
 esac
 
@@ -416,14 +544,14 @@ read -p "外网网卡接口 [$DEFAULT_INTERFACE]: " NETWORK_INTERFACE
 NETWORK_INTERFACE=${NETWORK_INTERFACE:-$DEFAULT_INTERFACE}
 
 if [[ $NAT_SUPPORT == "true" ]]; then
-  read -p "外网IPv4地址 [$DEFAULT_IPV4]: " NETWORK_IPV4
+  read -p "外网 IPv4 地址 [$DEFAULT_IPV4]: " NETWORK_IPV4
   NETWORK_IPV4=${NETWORK_IPV4:-$DEFAULT_IPV4}
 else
   NETWORK_IPV4=""
 fi
 
 if [[ $IPV6_NAT_SUPPORT == "true" ]]; then
-  read -p "外网IPv6地址 [$DEFAULT_IPV6]: " NETWORK_IPV6
+  read -p "外网 IPv6 地址 [$DEFAULT_IPV6]: " NETWORK_IPV6
   NETWORK_IPV6=${NETWORK_IPV6:-$DEFAULT_IPV6}
 else
   NETWORK_IPV6=""
@@ -432,19 +560,53 @@ fi
 if [[ $IPV6_BINDING_ENABLED == "true" ]]; then
   echo
   echo "==== IPv6 独立绑定配置 ===="
-  read -p "IPv6绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
+  read -p "IPv6 绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV6_BINDING_INTERFACE
   IPV6_BINDING_INTERFACE=${IPV6_BINDING_INTERFACE:-$DEFAULT_INTERFACE}
   
   while [[ -z "$IPV6_POOL_START" ]]; do
-    read -p "IPv6地址池起始地址 (如: 2001:db8::1000): " IPV6_POOL_START
+    read -p "IPv6 地址池起始地址 (如: 2001:db8::1000): " IPV6_POOL_START
     if [[ -z "$IPV6_POOL_START" ]]; then
-      echo "IPv6地址池起始地址不能为空，请重新输入"
+      warn "IPv6 地址池起始地址不能为空，请重新输入"
     fi
   done
 else
   IPV6_BINDING_INTERFACE=""
   IPV6_POOL_START=""
 fi
+
+ok "网络配置完成"
+echo
+
+echo "==== 步骤 5/5: Nginx 反向代理配置 ===="
+echo
+echo "是否启用 Nginx 反向代理功能？"
+echo "此功能允许为容器配置域名反向代理（需要已安装 Nginx）"
+echo
+read -p "是否启用 Nginx 反向代理? (y/N): " ENABLE_NGINX_PROXY
+
+if [[ $ENABLE_NGINX_PROXY == "y" || $ENABLE_NGINX_PROXY == "Y" ]]; then
+  NGINX_PROXY_ENABLED="true"
+  
+  # 检测并安装 Nginx
+  if ! command -v nginx &> /dev/null; then
+    info "正在安装 Nginx..."
+    apt update -y && apt install -y nginx || err "Nginx 安装失败"
+    systemctl enable nginx
+    systemctl start nginx
+    ok "Nginx 安装完成"
+  else
+    ok "检测到 Nginx 已安装"
+  fi
+  
+  ok "Nginx 反向代理功能已启用"
+else
+  NGINX_PROXY_ENABLED="false"
+  ok "已禁用 Nginx 反向代理功能"
+fi
+
+echo
+
+echo "==== 正在生成配置文件 ===="
 
 replace_config_var() {
   local placeholder="$1"
@@ -453,26 +615,59 @@ replace_config_var() {
   sed -i "s/\${$placeholder}/$escaped_value/g" "$CFG"
 }
 
-replace_config_var "DB_TYPE" "$DB_TYPE"
-if [[ $DB_TYPE == "mysql" ]]; then
-    replace_config_var "DB_MYSQL_HOST" "$DB_MYSQL_HOST"
-    replace_config_var "DB_MYSQL_PORT" "$DB_MYSQL_PORT"
-    replace_config_var "DB_MYSQL_USER" "$DB_MYSQL_USER"
-    replace_config_var "DB_MYSQL_PASSWORD" "$DB_MYSQL_PASSWORD"
-    replace_config_var "DB_MYSQL_DATABASE" "$DB_MYSQL_DATABASE"
-else
-    replace_config_var "DB_MYSQL_HOST" "localhost"
-    replace_config_var "DB_MYSQL_PORT" "3306"
-    replace_config_var "DB_MYSQL_USER" "lxdapi"
-    replace_config_var "DB_MYSQL_PASSWORD" "your_password"
-    replace_config_var "DB_MYSQL_DATABASE" "lxdapi"
-fi
-
-replace_config_var "STORAGE_POOLS" "$STORAGE_POOLS"
-replace_config_var "NAT_SUPPORT" "$NAT_SUPPORT"
 replace_config_var "SERVER_PORT" "$SERVER_PORT"
 replace_config_var "PUBLIC_NETWORK_IP_ADDRESS" "$EXTERNAL_IP"
 replace_config_var "API_ACCESS_HASH" "$API_HASH"
+replace_config_var "STORAGE_POOLS" "$STORAGE_POOLS"
+
+replace_config_var "DB_TYPE" "$DB_TYPE"
+if [[ $DB_TYPE == "mysql" || $DB_TYPE == "mariadb" ]]; then
+  replace_config_var "DB_MYSQL_HOST" "$DB_MYSQL_HOST"
+  replace_config_var "DB_MYSQL_PORT" "$DB_MYSQL_PORT"
+  replace_config_var "DB_MYSQL_USER" "$DB_MYSQL_USER"
+  replace_config_var "DB_MYSQL_PASSWORD" "$DB_MYSQL_PASSWORD"
+  replace_config_var "DB_MYSQL_DATABASE" "$DB_MYSQL_DATABASE"
+  replace_config_var "DB_POSTGRES_HOST" "localhost"
+  replace_config_var "DB_POSTGRES_PORT" "5432"
+  replace_config_var "DB_POSTGRES_USER" "lxdapi"
+  replace_config_var "DB_POSTGRES_PASSWORD" "your_password"
+  replace_config_var "DB_POSTGRES_DATABASE" "lxdapi"
+elif [[ $DB_TYPE == "postgres" ]]; then
+  replace_config_var "DB_POSTGRES_HOST" "$DB_POSTGRES_HOST"
+  replace_config_var "DB_POSTGRES_PORT" "$DB_POSTGRES_PORT"
+  replace_config_var "DB_POSTGRES_USER" "$DB_POSTGRES_USER"
+  replace_config_var "DB_POSTGRES_PASSWORD" "$DB_POSTGRES_PASSWORD"
+  replace_config_var "DB_POSTGRES_DATABASE" "$DB_POSTGRES_DATABASE"
+  replace_config_var "DB_MYSQL_HOST" "localhost"
+  replace_config_var "DB_MYSQL_PORT" "3306"
+  replace_config_var "DB_MYSQL_USER" "lxdapi"
+  replace_config_var "DB_MYSQL_PASSWORD" "your_password"
+  replace_config_var "DB_MYSQL_DATABASE" "lxdapi"
+else
+  replace_config_var "DB_MYSQL_HOST" "localhost"
+  replace_config_var "DB_MYSQL_PORT" "3306"
+  replace_config_var "DB_MYSQL_USER" "lxdapi"
+  replace_config_var "DB_MYSQL_PASSWORD" "your_password"
+  replace_config_var "DB_MYSQL_DATABASE" "lxdapi"
+  replace_config_var "DB_POSTGRES_HOST" "localhost"
+  replace_config_var "DB_POSTGRES_PORT" "5432"
+  replace_config_var "DB_POSTGRES_USER" "lxdapi"
+  replace_config_var "DB_POSTGRES_PASSWORD" "your_password"
+  replace_config_var "DB_POSTGRES_DATABASE" "lxdapi"
+fi
+
+replace_config_var "QUEUE_BACKEND" "$QUEUE_BACKEND"
+if [[ $QUEUE_BACKEND == "redis" ]]; then
+  replace_config_var "REDIS_HOST" "$REDIS_HOST"
+  replace_config_var "REDIS_PORT" "$REDIS_PORT"
+  replace_config_var "REDIS_PASSWORD" "$REDIS_PASSWORD"
+else
+  replace_config_var "REDIS_HOST" "localhost"
+  replace_config_var "REDIS_PORT" "6379"
+  replace_config_var "REDIS_PASSWORD" ""
+fi
+
+replace_config_var "NAT_SUPPORT" "$NAT_SUPPORT"
 replace_config_var "IPV6_NAT_SUPPORT" "$IPV6_NAT_SUPPORT"
 replace_config_var "NETWORK_EXTERNAL_INTERFACE" "$NETWORK_INTERFACE"
 replace_config_var "NETWORK_EXTERNAL_IPV4" "$NETWORK_IPV4"
@@ -480,6 +675,13 @@ replace_config_var "NETWORK_EXTERNAL_IPV6" "$NETWORK_IPV6"
 replace_config_var "IPV6_BINDING_ENABLED" "$IPV6_BINDING_ENABLED"
 replace_config_var "IPV6_BINDING_INTERFACE" "$IPV6_BINDING_INTERFACE"
 replace_config_var "IPV6_POOL_START" "$IPV6_POOL_START"
+
+replace_config_var "NGINX_PROXY_ENABLED" "$NGINX_PROXY_ENABLED"
+
+ok "配置文件已生成"
+echo
+
+echo "==== 创建系统服务 ===="
 
 cat > "$SERVICE" <<EOF
 [Unit]
@@ -500,28 +702,69 @@ EOF
 systemctl daemon-reload
 systemctl enable --now $NAME
 
+ok "系统服务已创建并启动"
 echo
-ok "安装/升级完成"
-echo "数据目录: $DIR"
-echo "外网IP: $EXTERNAL_IP"
-echo "API端口: $SERVER_PORT"
-echo "API Hash: $API_HASH"
-if [[ $DB_TYPE == "sqlite" ]]; then
-    echo "数据库: SQLite ($DB_SQLITE_PATH)"
-else
-    echo "数据库: MySQL ($DB_MYSQL_HOST:$DB_MYSQL_PORT/$DB_MYSQL_DATABASE)"
+
+echo "========================================"
+echo "          安装/升级完成"
+echo "========================================"
+echo
+echo "服务信息:"
+echo "  数据目录: $DIR"
+echo "  外网 IP: $EXTERNAL_IP"
+echo "  API 端口: $SERVER_PORT"
+echo "  API Hash: $API_HASH"
+echo
+echo "数据库配置:"
+case $DB_TYPE in
+  sqlite)
+    echo "  数据库: SQLite (lxdapi.db)"
+    ;;
+  mysql)
+    echo "  数据库: MySQL ($DB_MYSQL_HOST:$DB_MYSQL_PORT/$DB_MYSQL_DATABASE)"
+    ;;
+  mariadb)
+    echo "  数据库: MariaDB ($DB_MYSQL_HOST:$DB_MYSQL_PORT/$DB_MYSQL_DATABASE)"
+    ;;
+  postgres)
+    echo "  数据库: PostgreSQL ($DB_POSTGRES_HOST:$DB_POSTGRES_PORT/$DB_POSTGRES_DATABASE)"
+    ;;
+esac
+echo "  任务队列: $QUEUE_BACKEND"
+if [[ $QUEUE_BACKEND == "redis" ]]; then
+  echo "  Redis: $REDIS_HOST:$REDIS_PORT"
 fi
+echo
 echo "存储池配置: [$STORAGE_POOLS]"
-echo "网络模式: $(case $NETWORK_MODE in 1) echo "IPv4 NAT";; 2) echo "IPv4+IPv6 NAT";; 3) echo "全功能模式";; 4) echo "混合模式";; 5) echo "纯IPv6模式";; esac)"
+echo
+echo "网络模式:"
+case $NETWORK_MODE in
+  1) echo "  IPv4 NAT";;
+  2) echo "  IPv4 + IPv6 NAT";;
+  3) echo "  全功能模式 (IPv4 NAT + IPv6 NAT + IPv6 独立绑定)";;
+  4) echo "  混合模式 (IPv4 NAT + IPv6 独立绑定)";;
+  5) echo "  纯 IPv6 模式";;
+esac
+echo
+echo "反向代理:"
+if [[ $NGINX_PROXY_ENABLED == "true" ]]; then
+  echo "  状态: 已启用 (Nginx 已安装并启动)"
+else
+  echo "  状态: 未启用"
+fi
+echo
 
 if [[ -d "$DIR/backups" ]]; then
-    backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
-    if [[ $backup_count -gt 0 ]]; then
-        latest_backup=$(ls -t "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | head -1)
-        backup_size=$(du -h "$latest_backup" 2>/dev/null | cut -f1)
-        echo "SQLite备份: $backup_count 个压缩备份 (最新: $(basename "$latest_backup"), 大小: $backup_size)"
-    fi
+  backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
+  if [[ $backup_count -gt 0 ]]; then
+    latest_backup=$(ls -t "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | head -1)
+    backup_size=$(du -h "$latest_backup" 2>/dev/null | cut -f1)
+    echo "SQLite 备份: $backup_count 个压缩备份 (最新: $(basename "$latest_backup"), 大小: $backup_size)"
+    echo
+  fi
 fi
 
-echo "服务状态信息:"
+echo "========================================"
+echo "服务状态:"
+echo "========================================"
 systemctl status $NAME --no-pager
