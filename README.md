@@ -10,14 +10,12 @@
 
 ## 版本功能计划
 
-- ✅ 核心容器管理 - ✅ NAT端口转发 - ✅ IPv6独立绑定 - ✅ 流量监控与统计 - ✅ VNC控制台访问 - ✅ 安全与认证 - ✅ 系统集成 - ✅ 前端界面优化  - ✅ 数据库支持sqlite/mysql - ✅ 管理后台
-- 🔲 反向代理功能
-
+- ✅ 核心容器管理 - ✅ NAT端口转发 - ✅ IPv6独立绑定 - ✅ 流量监控与统计 - ✅ VNC控制台访问 - ✅ 安全与认证 - ✅ 系统集成 - ✅ 前端界面优化  - ✅ 数据库拓展 - ✅ 管理后台 - ✅ 反向代理功能
 
 ## 项目截图
 
 info页面
-<img width="1637" height="829" alt="image" src="https://github.com/user-attachments/assets/286f159a-2471-44a9-ad66-c152482cd5a2" />
+<img width="1920" height="911" alt="image" src="https://github.com/user-attachments/assets/d994f4da-245f-4df5-96c3-0b3c8eded016" />
 
 nat页面
 <img width="1150" height="534" alt="image" src="https://github.com/user-attachments/assets/4ba28cc5-1d3d-45a8-9e1b-9ecb28294389" /><img width="518" height="593" alt="image" src="https://github.com/user-attachments/assets/9cc5e287-e275-4f6a-8813-e5d056c61f38" />
@@ -26,7 +24,7 @@ ipv6页面
 <img width="1162" height="514" alt="image" src="https://github.com/user-attachments/assets/a8caea46-b6d3-4a05-8d7e-33d465d910a5" /><img width="534" height="428" alt="image" src="https://github.com/user-attachments/assets/3972edcd-b8ac-435a-adac-c215aaa5494d" />
 
 vnc页面
-<img width="1276" height="907" alt="image" src="https://github.com/user-attachments/assets/ed1aae23-9f8e-4c7b-a8cc-da77ea0acd13" />
+<img width="1920" height="911" alt="image" src="https://github.com/user-attachments/assets/6093a9f8-ce35-4968-a028-8673519c0ba9" />
 
 商品配置页面
 <img width="1183" height="616" alt="image" src="https://github.com/user-attachments/assets/6f0ba5ff-cf36-4eb0-a593-3f767a8d6d56" />
