@@ -149,6 +149,21 @@ function lxdserver_ConfigOptions()
             'default'     => '1',
             'key'         => 'ipv6_limit',
         ],
+        'proxy_enabled' => [
+            'type'        => 'dropdown',
+            'name'        => 'Nginx反向代理功能',
+            'description' => '是否启用Nginx反向代理功能',
+            'default'     => 'false',
+            'key'         => 'proxy_enabled',
+            'options'     => ['false' => '禁用', 'true' => '启用'],
+        ],
+        'proxy_limit' => [
+            'type'        => 'text',
+            'name'        => '反向代理域名数量',
+            'description' => '允许绑定的域名数量限制',
+            'default'     => '1',
+            'key'         => 'proxy_limit',
+        ],
         'allow_nesting' => [
             'type'        => 'dropdown',
             'name'        => '嵌套虚拟化',
@@ -250,6 +265,11 @@ function lxdserver_ClientArea($params)
         $pages['ipv6_acl'] = ['name' => 'IPv6绑定'];
     }
     
+    $proxy_enabled = ($params['configoptions']['proxy_enabled'] ?? 'false') === 'true';
+    if ($proxy_enabled) {
+        $pages['proxy_acl'] = ['name' => '反向代理'];
+    }
+    
     return $pages;
 }
 
@@ -274,6 +294,12 @@ function lxdserver_ClientAreaOutput($params, $key)
             exit;
         }
 
+        if ($action === 'proxycheck') {
+            header('Content-Type: application/json');
+            echo json_encode(lxdserver_proxycheck($params));
+            exit;
+        }
+
         $apiEndpoints = [
             'getinfo'    => '/api/status',
             'getstats'   => '/api/info',
@@ -281,6 +307,7 @@ function lxdserver_ClientAreaOutput($params, $key)
             'getinfoall' => '/api/info',
             'natlist'    => '/api/natlist',
             'ipv6list'   => '/api/ipv6/list',
+            'proxylist'  => '/api/proxy/list',
         ];
 
         $apiEndpoint = $apiEndpoints[$action] ?? '';
@@ -378,13 +405,41 @@ function lxdserver_ClientAreaOutput($params, $key)
             ],
         ];
     }
+    
+    if ($key == 'proxy_acl') {
+        $proxy_enabled = ($params['configoptions']['proxy_enabled'] ?? 'false') === 'true';
+        
+        $requestData = [
+            'url'  => '/api/proxy/list?hostname=' . $params['domain'] . '&_t=' . time(),
+            'type' => 'application/x-www-form-urlencoded',
+            'data' => [],
+        ];
+        
+        $res = lxdserver_curl($params, $requestData);
+        
+        $proxy_limit = intval($params['configoptions']['proxy_limit'] ?? 1);
+        $current_count = is_array($res['data']) ? count($res['data']) : 0;
+        
+        return [
+            'template' => 'templates/proxy.html',
+            'vars'     => [
+                'list' => $res['data'] ?? [],
+                'msg'  => $res['msg'] ?? '',
+                'proxy_limit' => $proxy_limit,
+                'current_count' => $current_count,
+                'remaining_count' => max(0, $proxy_limit - $current_count),
+                'container_name' => $params['domain'],
+                'proxy_enabled' => $proxy_enabled,
+            ],
+        ];
+    }
 }
 
 // 允许客户端调用的函数列表
 function lxdserver_AllowFunction()
 {
     return [
-        'client' => ['natadd', 'natdel', 'natlist', 'natcheck', 'ipv6add', 'ipv6del', 'ipv6list'],
+        'client' => ['natadd', 'natdel', 'natlist', 'natcheck', 'ipv6add', 'ipv6del', 'ipv6list', 'proxyadd', 'proxydel', 'proxylist', 'proxycheck'],
     ];
 }
 
@@ -1311,4 +1366,145 @@ function lxdserver_ipv6list($params)
     } else {
         return ['status' => 'error', 'data' => [], 'msg' => $res['msg'] ?? '获取IPv6绑定列表失败'];
     }
+}
+
+// 添加反向代理
+function lxdserver_proxyadd($params)
+{
+    $proxy_enabled = ($params['configoptions']['proxy_enabled'] ?? 'false') === 'true';
+    if (!$proxy_enabled) {
+        return ['status' => 'error', 'msg' => 'Nginx反向代理功能已禁用，请联系管理员启用此功能。'];
+    }
+    
+    parse_str(file_get_contents("php://input"), $post);
+
+    $domain = trim($post['domain'] ?? '');
+    $container_port = intval($post['container_port'] ?? 80);
+    $description = trim($post['description'] ?? '');
+
+    if (empty($domain)) {
+        return ['status' => 'error', 'msg' => '请输入域名'];
+    }
+
+    // 验证域名格式
+    if (!preg_match('/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/', $domain)) {
+        return ['status' => 'error', 'msg' => '域名格式无效'];
+    }
+
+    // 检查数量限制
+    $proxy_limit = intval($params['configoptions']['proxy_limit'] ?? 1);
+    $current_count = lxdserver_getProxyCount($params);
+    
+    if ($current_count >= $proxy_limit) {
+        return ['status' => 'error', 'msg' => "已达到反向代理数量上限（{$proxy_limit}个），无法继续添加"];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . 
+                   '&domain=' . urlencode($domain) . 
+                   '&container_port=' . $container_port .
+                   '&description=' . urlencode($description);
+
+    $data = [
+        'url'  => '/api/proxy/add',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data);
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => '反向代理添加成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '添加反向代理失败'];
+    }
+}
+
+// 删除反向代理
+function lxdserver_proxydel($params)
+{
+    parse_str(file_get_contents("php://input"), $post);
+
+    $domain = trim($post['domain'] ?? '');
+
+    if (empty($domain)) {
+        return ['status' => 'error', 'msg' => '缺少域名参数'];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&domain=' . urlencode($domain);
+
+    $data = [
+        'url'  => '/api/proxy/delete',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data);
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => '反向代理删除成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '删除反向代理失败'];
+    }
+}
+
+// 获取反向代理列表
+function lxdserver_proxylist($params)
+{
+    $data = [
+        'url'  => '/api/proxy/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'data' => $res['data'] ?? [], 'msg' => $res['msg'] ?? ''];
+    } else {
+        return ['status' => 'error', 'data' => [], 'msg' => $res['msg'] ?? '获取反向代理列表失败'];
+    }
+}
+
+// 检查域名是否可用
+function lxdserver_proxycheck($params)
+{
+    parse_str(file_get_contents("php://input"), $post);
+    
+    $domain = trim($post['domain'] ?? '');
+    
+    if (empty($domain)) {
+        return ['status' => 'error', 'msg' => '请输入域名'];
+    }
+    
+    $data = [
+        'url'  => '/api/proxy/check?domain=' . urlencode($domain),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+    
+    $res = lxdserver_Curl($params, $data, 'GET');
+    
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'data' => $res['data'] ?? [], 'msg' => $res['msg'] ?? ''];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? '检查域名失败'];
+    }
+}
+
+// 获取反向代理数量
+function lxdserver_getProxyCount($params)
+{
+    $data = [
+        'url'  => '/api/proxy/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200 && is_array($res['data'])) {
+        return count($res['data']);
+    }
+
+    return 0;
 }

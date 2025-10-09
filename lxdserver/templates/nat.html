@@ -16,9 +16,9 @@
 
 .modern-table thead th {
     border: none;
-    padding: 14px 16px;
+    padding: 10px 12px;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     border-bottom: 2px solid #e9ecef;
 }
 
@@ -43,9 +43,9 @@
 
 .modern-table tbody td {
     border: none;
-    padding: 14px 16px;
+    padding: 10px 12px;
     vertical-align: middle;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 /* 端口样式简化 */
@@ -59,12 +59,12 @@
     background: #e3f2fd;
     color: #1976d2;
     border: 1px solid #bbdefb;
-    padding: 6px 12px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-weight: 600;
-    font-size: 0.85rem;
-    min-width: 70px;
+    font-size: 0.8rem;
+    min-width: 60px;
     text-align: center;
 }
 
@@ -72,18 +72,18 @@
     background: #e8f5e8;
     color: #388e3c;
     border: 1px solid #c8e6c9;
-    padding: 6px 12px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-weight: 600;
-    font-size: 0.85rem;
-    min-width: 70px;
+    font-size: 0.8rem;
+    min-width: 60px;
     text-align: center;
 }
 
 .port-arrow {
     color: #6c757d;
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: bold;
 }
 
@@ -139,10 +139,10 @@
     background: #ffffff;
     color: #dc3545;
     border: 1px solid #dc3545;
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 4px;
     font-weight: 500;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     transition: all 0.2s ease;
 }
 
@@ -155,9 +155,10 @@
     background: #007bff;
     border: 1px solid #007bff;
     color: white;
-    padding: 8px 16px;
+    padding: 5px 10px;
     border-radius: 4px;
     font-weight: 500;
+    font-size: 0.75rem;
     transition: all 0.2s ease;
 }
 
@@ -175,7 +176,7 @@
     font-style: italic;
     font-size: 0.85rem;
     border-left: 3px solid #007bff;
-    max-width: 200px;
+    max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -203,36 +204,41 @@
 @media (max-width: 768px) {
     .modern-table thead th,
     .modern-table tbody td {
-        padding: 10px 8px;
-        font-size: 0.8rem;
+        padding: 8px 6px;
+        font-size: 0.75rem;
     }
     
     .port-number,
     .internal-port {
-        font-size: 0.75rem;
-        padding: 4px 8px;
-        min-width: 50px;
+        font-size: 0.7rem;
+        padding: 3px 6px;
+        min-width: 45px;
     }
     
     .protocol-badge {
-        font-size: 0.7rem;
-        padding: 3px 8px;
-        min-width: 40px;
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        min-width: 35px;
     }
     
     .action-btn {
-        font-size: 0.75rem;
-        padding: 5px 8px;
+        font-size: 0.7rem;
+        padding: 4px 6px;
     }
     
     .description-text {
         max-width: 100px;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
+    }
+    
+    .status-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
     }
     
     .port-display {
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
     }
 }
 </style>
@@ -279,7 +285,7 @@
             </div>
 
 
-            <div id="nat-list-container" class="mt-4" style="display:block">
+            <div id="nat-list-container" style="display:block">
                 <div class="table-responsive">
                     <table class="table modern-table mb-0">
                         <thead>
@@ -326,6 +332,9 @@
                     </button>
                 </div>
                 <div class="modal-body">
+                    <div class="alert alert-success mb-3">
+                        <i class="fas fa-info-circle mr-1"></i><strong>功能说明:</strong> 配置端口转发规则，通过外网端口访问容器内部服务
+                    </div>
                     <form id="addNatForm">
                         <div class="form-group">
                             <label for="sportinput">
@@ -391,10 +400,10 @@
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary mr-2" data-dismiss="modal" onclick="closeAddModal()">
+                    <button type="button" class="btn btn-secondary btn-sm mr-2" data-dismiss="modal" onclick="closeAddModal()">
                         <i class="fas fa-times mr-1"></i>取消
                     </button>
-                    <button type="button" class="btn btn-create confirm-btnlxdserveracl">
+                    <button type="button" class="btn btn-primary btn-sm confirm-btnlxdserveracl">
                         <i class="fas fa-check mr-1"></i>确认创建
                     </button>
                 </div>
@@ -686,12 +695,12 @@ function updateNATCounters(count) {
     if (count >= natLimit) {
         $addBtn.prop('disabled', true);
         $addBtn.html('<i class="fas fa-ban mr-1"></i>已达限制');
-        $addBtn.removeClass('btn-create').addClass('btn-secondary');
+        $addBtn.removeClass('btn-create').addClass('btn-secondary btn-sm');
         $addBtn.attr('title', `NAT规则数量已达到限制（${natLimit}条）`);
     } else {
         $addBtn.prop('disabled', false);
         $addBtn.html('<i class="fas fa-plus mr-1"></i>创建转发');
-        $addBtn.removeClass('btn-secondary').addClass('btn-create');
+        $addBtn.removeClass('btn-secondary').addClass('btn-create btn-sm');
         $addBtn.attr('title', '');
     }
 }

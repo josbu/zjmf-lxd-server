@@ -16,39 +16,44 @@
 .resource-header {
     color: #495057;
     font-weight: 600;
-    font-size: 0.9rem;
-    margin-bottom: 8px;
+    font-size: 0.8rem;
+    margin-bottom: 6px;
 }
 
 .resource-header i {
     color: #6c757d;
-    margin-right: 6px;
+    margin-right: 4px;
+    font-size: 0.85rem;
 }
 
 /* 响应式设计 */
+@media (max-width: 1200px) {
+    .resource-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 768px) {
     .resource-grid {
         grid-template-columns: 1fr;
-        grid-template-rows: repeat(4, auto);
-        gap: 12px;
-        min-height: auto;
+        gap: 10px;
     }
     
     .resource-grid-item {
-        padding: 14px;
+        padding: 12px;
     }
     
     .resource-value {
-        font-size: 1.25rem;
-        margin-bottom: 10px;
+        font-size: 1.1rem;
+        margin-bottom: 8px;
     }
     
     .resource-header {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
     
     .progress {
-        height: 5px;
+        height: 4px;
     }
 }
 
@@ -69,8 +74,8 @@
 }
 
 .progress {
-    height: 6px;
-    border-radius: 4px;
+    height: 5px;
+    border-radius: 3px;
     background-color: #e9ecef;
     border: 1px solid #dee2e6;
 }
@@ -102,8 +107,9 @@
 }
 
 .resource-icon {
-    opacity: 0.2;
+    opacity: 0.15;
     color: #6c757d;
+    font-size: 1.5rem !important;
 }
 
 .badge {
@@ -130,28 +136,27 @@
     border: 1px solid #c3e6cb;
 }
 
-/* 田字格样式 - 更紧凑的布局 */
+/* 一排4个卡片 - 更紧凑的布局 */
 .resource-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 16px;
-    min-height: 260px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    min-height: auto;
 }
 
 .resource-grid-item {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 16px;
+    padding: 12px;
     height: 100%;
 }
 
 .resource-value {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    margin-bottom: 8px;
-    min-height: 1.8rem;
+    margin-bottom: 6px;
+    min-height: 1.4rem;
     display: flex;
     align-items: center;
 }
@@ -185,7 +190,7 @@
                             加载中...
                         </div>
                     </div>
-                    <i class="fas fa-microchip fa-2x resource-icon"></i>
+                    <i class="fas fa-microchip resource-icon"></i>
                 </div>
                 <div class="progress">
                     <div class="progress-bar progress-primary" style="width: 0%" id="cpu-progress"></div>
@@ -202,7 +207,7 @@
                             加载中...
                         </div>
                     </div>
-                    <i class="fas fa-memory fa-2x resource-icon"></i>
+                    <i class="fas fa-memory resource-icon"></i>
                 </div>
                 <div class="progress">
                     <div class="progress-bar progress-success" style="width: 0%" id="memory-progress"></div>
@@ -219,7 +224,7 @@
                             加载中...
                         </div>
                     </div>
-                    <i class="fas fa-hdd fa-2x resource-icon"></i>
+                    <i class="fas fa-hdd resource-icon"></i>
                 </div>
                 <div class="progress">
                     <div class="progress-bar progress-info" style="width: 0%" id="disk-progress"></div>
@@ -236,7 +241,7 @@
                             加载中...
                         </div>
                     </div>
-                    <i class="fas fa-exchange-alt fa-2x resource-icon"></i>
+                    <i class="fas fa-exchange-alt resource-icon"></i>
                 </div>
                 <div class="progress">
                     <div class="progress-bar progress-warning" style="width: 0%" id="traffic-progress"></div>
