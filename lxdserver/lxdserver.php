@@ -21,7 +21,7 @@ function lxdserver_MetaData()
 {
     return [
         'DisplayName' => '魔方财务-LXD对接插件 by xkatld',
-        'APIVersion'  => '1.0.0',
+        'APIVersion'  => '1.0.1',
         'HelpDoc'     => 'https://github.com/xkatld/zjmf-lxd-server',
     ];
 }

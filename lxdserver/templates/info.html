@@ -160,7 +160,31 @@
     display: flex;
     align-items: center;
 }
+
+/* Chart.js 图表样式 */
+canvas {
+    width: 100% !important;
+    height: 150px !important;
+}
 </style>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 等待 Chart.js 加载
+window.chartJsLoaded = false;
+if (typeof Chart !== 'undefined') {
+    window.chartJsLoaded = true;
+} else {
+    // 轮询检查 Chart.js 是否加载
+    const checkChart = setInterval(() => {
+        if (typeof Chart !== 'undefined') {
+            window.chartJsLoaded = true;
+            clearInterval(checkChart);
+        }
+    }, 50);
+}
+</script>
 
 <div class="container-fluid">
 <div class="card shadow mb-4">
@@ -192,9 +216,7 @@
                     </div>
                     <i class="fas fa-microchip resource-icon"></i>
                 </div>
-                <div class="progress">
-                    <div class="progress-bar progress-primary" style="width: 0%" id="cpu-progress"></div>
-                </div>
+                <canvas id="cpuChart"></canvas>
             </div>
             
             <div class="card resource-card resource-grid-item">
@@ -209,9 +231,7 @@
                     </div>
                     <i class="fas fa-memory resource-icon"></i>
                 </div>
-                <div class="progress">
-                    <div class="progress-bar progress-success" style="width: 0%" id="memory-progress"></div>
-                </div>
+                <canvas id="memoryChart"></canvas>
             </div>
             
             <div class="card resource-card resource-grid-item">
@@ -226,9 +246,7 @@
                     </div>
                     <i class="fas fa-hdd resource-icon"></i>
                 </div>
-                <div class="progress">
-                    <div class="progress-bar progress-info" style="width: 0%" id="disk-progress"></div>
-                </div>
+                <canvas id="diskChart"></canvas>
             </div>
             
             <div class="card resource-card resource-grid-item">
@@ -243,9 +261,7 @@
                     </div>
                     <i class="fas fa-exchange-alt resource-icon"></i>
                 </div>
-                <div class="progress">
-                    <div class="progress-bar progress-warning" style="width: 0%" id="traffic-progress"></div>
-                </div>
+                <canvas id="trafficChart"></canvas>
             </div>
         </div>
     </div>
@@ -268,9 +284,9 @@
             </div>
             <div class="col-md-6">
                 <ul class="list-unstyled">
-                    <li class="mb-2"><i class="fas fa-sync-alt text-primary mr-2"></i>数据攧5秒自动刷新一次</li>
+                    <li class="mb-2"><i class="fas fa-sync-alt text-primary mr-2"></i>数据定时自动刷新</li>
                     <li class="mb-2"><i class="fas fa-mouse-pointer text-info mr-2"></i>点击刷新按钮可手动更新数据</li>
-                    <li class="mb-2"><i class="fas fa-chart-bar text-danger mr-2"></i>资源使用率超过90%时请注意监控</li>
+                    <li class="mb-2"><i class="fas fa-chart-bar text-danger mr-2"></i>资源使用率过高时请注意监控</li>
                 </ul>
             </div>
         </div>
@@ -282,11 +298,79 @@
 const INFO_DEBUG_MODE = false;
 
 var currentInfoContainerId = '';
+var cpuChart, memoryChart, diskChart, trafficChart;
 
 function infoDebug(message, data) {
     if (INFO_DEBUG_MODE) {
         console.log('[INFO-DEBUG]', message, data);
     }
+}
+
+// 初始化 Chart.js 图表
+function initCharts() {
+    const chartConfig = {
+        type: 'line',
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#f0f0f0' },
+                    ticks: { color: '#999', font: { size: 9 } }
+                }
+            },
+            elements: {
+                line: { tension: 0.4, borderWidth: 2 },
+                point: { radius: 0, hitRadius: 10, hoverRadius: 3 }
+            }
+        }
+    };
+
+    const maxDataPoints = 20;
+    const labels = Array(maxDataPoints).fill('');
+
+    cpuChart = new Chart(document.getElementById('cpuChart'), {
+        ...chartConfig,
+        data: {
+            labels: labels,
+            datasets: [{ data: Array(maxDataPoints).fill(0), borderColor: '#007bff', backgroundColor: 'rgba(0, 123, 255, 0.1)', fill: true }]
+        }
+    });
+
+    memoryChart = new Chart(document.getElementById('memoryChart'), {
+        ...chartConfig,
+        data: {
+            labels: labels,
+            datasets: [{ data: Array(maxDataPoints).fill(0), borderColor: '#28a745', backgroundColor: 'rgba(40, 167, 69, 0.1)', fill: true }]
+        }
+    });
+
+    diskChart = new Chart(document.getElementById('diskChart'), {
+        ...chartConfig,
+        data: {
+            labels: labels,
+            datasets: [{ data: Array(maxDataPoints).fill(0), borderColor: '#17a2b8', backgroundColor: 'rgba(23, 162, 184, 0.1)', fill: true }]
+        }
+    });
+
+    trafficChart = new Chart(document.getElementById('trafficChart'), {
+        ...chartConfig,
+        data: {
+            labels: labels,
+            datasets: [{ data: Array(maxDataPoints).fill(0), borderColor: '#ffc107', backgroundColor: 'rgba(255, 193, 7, 0.1)', fill: true }]
+        }
+    });
+}
+
+function updateChart(chart, value) {
+    if (!chart) return;
+    const data = chart.data.datasets[0].data;
+    data.shift();
+    data.push(value);
+    chart.update('none');
 }
 
 function refreshInfoPage() {
@@ -356,13 +440,13 @@ function updateAllInfo(data) {
     const cpuCores = data.cpus || 'N/A';
     const cpuUsageFormatted = parseFloat(cpuUsage).toFixed(1);
     $('#cpu-info').text(`${cpuUsageFormatted}% (${cpuCores} Core)`);
-    $('#cpu-progress').css('width', Math.min(parseFloat(cpuUsage) || 0, 100) + '%');
+    updateChart(cpuChart, parseFloat(cpuUsage));
 
     const memoryUsage = data.memory_usage || 'N/A';
     const memoryTotal = (data.config && data.config.memory) || 'N/A';
     const memoryPercent = parseFloat(data.memory_percent) || 0;
     $('#memory-info').text(`${memoryUsage} / ${memoryTotal}`);
-    $('#memory-progress').css('width', Math.min(memoryPercent, 100) + '%');
+    updateChart(memoryChart, memoryPercent);
 
     function formatDiskSize(value) {
         if (typeof value === 'string') {
@@ -386,7 +470,7 @@ function updateAllInfo(data) {
     
     const diskPercent = parseFloat(data.disk_percent) || 0;
     $('#disk-info').text(`${diskUsage} / ${diskTotal}`);
-    $('#disk-progress').css('width', Math.min(diskPercent, 100) + '%');
+    updateChart(diskChart, diskPercent);
 
     const trafficUsage = data.traffic_usage || 'N/A';
     const trafficUsageRaw = data.traffic_usage_raw || 0;
@@ -398,19 +482,10 @@ function updateAllInfo(data) {
         const trafficPercent = Math.min((parseFloat(trafficUsageGB) / trafficLimitGB) * 100, 100);
         
         $('#traffic-info').text(`${trafficUsageGB} GB / ${trafficLimitGB} GB`);
-        $('#traffic-progress').css('width', trafficPercent + '%');
-        
-        if (trafficPercent >= 100) {
-            $('#traffic-progress').removeClass('progress-warning').addClass('progress-danger');
-        } else if (trafficPercent >= 80) {
-            $('#traffic-progress').removeClass('progress-danger').addClass('progress-warning');
-        } else {
-            $('#traffic-progress').removeClass('progress-danger').addClass('progress-warning');
-        }
+        updateChart(trafficChart, parseFloat(trafficUsageGB));
     } else {
         $('#traffic-info').text(`累计: ${trafficUsage}`);
-        $('#traffic-progress').css('width', '10%');
-        $('#traffic-progress').removeClass('progress-danger').addClass('progress-warning');
+        updateChart(trafficChart, 0);
     }
 
     if (data.last_update) {
@@ -435,24 +510,42 @@ function showError(message) {
 }
 
 $(document).ready(function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const containerId = urlParams.get('id');
+    // 等待 Chart.js 加载完成
+    const waitForChart = setInterval(function() {
+        if (window.chartJsLoaded || typeof Chart !== 'undefined') {
+            clearInterval(waitForChart);
+            
+            // 初始化图表
+            initCharts();
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const containerId = urlParams.get('id');
 
-    if (!containerId) {
-        showError('无法获取容器ID');
-        return;
-    }
+            if (!containerId) {
+                showError('无法获取容器ID');
+                return;
+            }
 
-    currentInfoContainerId = containerId;
-    infoDebug('设置容器ID', containerId);
+            currentInfoContainerId = containerId;
+            infoDebug('设置容器ID', containerId);
 
-    updateLastUpdateTime();
+            updateLastUpdateTime();
 
-    loadContainerInfo();
+            loadContainerInfo();
 
-    setInterval(function() {
-        infoDebug('定时器触发，刷新容器信息');
-        loadContainerInfo();
-    }, 10000);
+            setInterval(function() {
+                infoDebug('定时器触发，刷新容器信息');
+                loadContainerInfo();
+            }, 10000);
+        }
+    }, 50);
+    
+    // 5秒超时保护
+    setTimeout(function() {
+        clearInterval(waitForChart);
+        if (!cpuChart) {
+            console.error('Chart.js 加载超时');
+        }
+    }, 5000);
 });
 </script>
