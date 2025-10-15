@@ -408,26 +408,32 @@
                 const cpuDisplay = `<div class="text-xs font-medium ${cpuPercent > 80 ? 'text-red-600' : 'text-gray-700'}">${cpuCores}核 (${cpuPercent}%)</div>`;
                 
                 // 内存: 显示百分比 + 使用量/总量 + 进度条
-                const memoryDisplay = (c.memory_usage && c.memory_total) 
+                const memoryUsage = c.memory_usage_raw ?? c.memory_usage;
+                const memoryTotal = c.memory_total ?? (c.memory ? c.memory * 1024 * 1024 : null);
+                const memoryDisplay = (memoryUsage != null && memoryTotal != null) 
                     ? (() => {
-                        const percent = (c.memory_usage / c.memory_total * 100).toFixed(1);
-                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(c.memory_usage)} / ${formatBytes(c.memory_total)}</div>` + renderProgress(c.memory_usage, c.memory_total);
+                        const percent = (memoryUsage / memoryTotal * 100).toFixed(1);
+                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(memoryUsage)} / ${formatBytes(memoryTotal)}</div>` + renderProgress(memoryUsage, memoryTotal);
                     })()
                     : '<span class="text-gray-400 text-xs">-</span>';
                 
                 // 磁盘: 显示百分比 + 使用量/总量 + 进度条
-                const diskDisplay = (c.disk_usage && c.disk_total)
+                const diskUsage = c.disk_usage_raw ?? c.disk_usage;
+                const diskTotal = c.disk_total ?? (c.disk ? c.disk * 1024 * 1024 : null);
+                const diskDisplay = (diskUsage != null && diskTotal != null)
                     ? (() => {
-                        const percent = (c.disk_usage / c.disk_total * 100).toFixed(1);
-                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(c.disk_usage)} / ${formatBytes(c.disk_total)}</div>` + renderProgress(c.disk_usage, c.disk_total);
+                        const percent = (diskUsage / diskTotal * 100).toFixed(1);
+                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(diskUsage)} / ${formatBytes(diskTotal)}</div>` + renderProgress(diskUsage, diskTotal);
                     })()
                     : '<span class="text-gray-400 text-xs">-</span>';
                 
                 // 流量: 显示百分比 + 使用量/限额 + 进度条
-                const trafficDisplay = (c.traffic_total && c.traffic_limit) 
+                const trafficUsage = c.traffic_usage_raw ?? c.traffic_total;
+                const trafficLimit = c.config?.traffic_limit ?? c.traffic_limit;
+                const trafficDisplay = (trafficUsage != null && trafficLimit != null) 
                     ? (() => {
-                        const percent = (c.traffic_total / (c.traffic_limit * 1024 * 1024 * 1024) * 100).toFixed(1);
-                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(c.traffic_total)} / ${c.traffic_limit} GB</div>` + renderProgress(c.traffic_total, c.traffic_limit * 1024 * 1024 * 1024);
+                        const percent = (trafficUsage / (trafficLimit * 1024 * 1024 * 1024) * 100).toFixed(1);
+                        return `<div class="text-xs text-gray-600 mb-1">${percent}% | ${formatBytes(trafficUsage)} / ${trafficLimit} GB</div>` + renderProgress(trafficUsage, trafficLimit * 1024 * 1024 * 1024);
                     })()
                     : '<span class="text-gray-400 text-xs">-</span>';
                 return `
