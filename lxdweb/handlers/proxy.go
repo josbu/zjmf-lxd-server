@@ -145,15 +145,16 @@ func GetProxySyncTasks(c *gin.Context) {
 // @Router /api/proxy-configs/cache [get]
 func GetProxyConfigsFromCache(c *gin.Context) {
 	var configs []models.ProxyConfigCache
-	query := database.DB.Joins("JOIN nodes ON nodes.id = proxy_config_caches.node_id").
+	query := database.DB.
+		Joins("JOIN nodes ON nodes.id = proxy_config_caches.node_id").
 		Where("nodes.status = ?", "active").
-		Order("last_sync desc")
+		Order("proxy_config_caches.last_sync desc")
 
 	if nodeID := c.Query("node_id"); nodeID != "" {
 		query = query.Where("proxy_config_caches.node_id = ?", nodeID)
 	}
 	if hostname := c.Query("hostname"); hostname != "" {
-		query = query.Where("hostname = ?", hostname)
+		query = query.Where("proxy_config_caches.hostname = ?", hostname)
 	}
 
 	if err := query.Find(&configs).Error; err != nil {
@@ -341,7 +342,7 @@ func DeleteProxyConfig(c *gin.Context) {
 	if err := database.DB.First(&config, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
-			"msg":  "代理配置不存在",
+			"msg":  "代理配置不存在: " + err.Error(),
 		})
 		return
 	}
@@ -350,7 +351,7 @@ func DeleteProxyConfig(c *gin.Context) {
 	if err := database.DB.First(&node, config.NodeID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
-			"msg":  "节点不存在",
+			"msg":  "节点不存在: " + err.Error(),
 		})
 		return
 	}
@@ -362,9 +363,13 @@ func DeleteProxyConfig(c *gin.Context) {
 
 	result := callNodeAPIForProxyMgmt(node, "POST", "/api/proxy/delete", proxyData)
 	if result["code"] != float64(200) {
+		msg := "未知错误"
+		if msgStr, ok := result["msg"].(string); ok {
+			msg = msgStr
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
-			"msg":  result["msg"],
+			"msg":  "删除失败: " + msg,
 		})
 		return
 	}
@@ -379,7 +384,7 @@ func DeleteProxyConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "删除成功",
+		"msg":  "反向代理删除成功",
 	})
 }
 

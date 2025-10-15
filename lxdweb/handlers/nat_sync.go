@@ -209,10 +209,19 @@ func GetNATRulesFromCache(c *gin.Context) {
 	}
 
 	var rules []models.NATRuleCache
-	database.DB.Joins("JOIN nodes ON nodes.id = nat_rule_caches.node_id").
+	result := database.DB.
+		Joins("JOIN nodes ON nodes.id = nat_rule_cache.node_id").
 		Where("nodes.status = ?", "active").
-		Order("node_id ASC, external_port ASC").
+		Order("nat_rule_cache.node_id ASC, nat_rule_cache.external_port ASC").
 		Find(&rules)
+	
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "查询失败: " + result.Error.Error(),
+		})
+		return
+	}
 	
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,

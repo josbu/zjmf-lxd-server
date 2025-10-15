@@ -145,15 +145,16 @@ func GetIPv6SyncTasks(c *gin.Context) {
 // @Router /api/ipv6/cache [get]
 func GetIPv6BindingsFromCache(c *gin.Context) {
 	var bindings []models.IPv6BindingCache
-	query := database.DB.Joins("JOIN nodes ON nodes.id = i_pv6_binding_caches.node_id").
+	query := database.DB.
+		Joins("JOIN nodes ON nodes.id = ipv6_binding_caches.node_id").
 		Where("nodes.status = ?", "active").
-		Order("last_sync desc")
+		Order("ipv6_binding_caches.last_sync desc")
 
 	if nodeID := c.Query("node_id"); nodeID != "" {
-		query = query.Where("i_pv6_binding_caches.node_id = ?", nodeID)
+		query = query.Where("ipv6_binding_caches.node_id = ?", nodeID)
 	}
 	if hostname := c.Query("hostname"); hostname != "" {
-		query = query.Where("hostname = ?", hostname)
+		query = query.Where("ipv6_binding_caches.hostname = ?", hostname)
 	}
 
 	if err := query.Find(&bindings).Error; err != nil {

@@ -248,7 +248,7 @@ func SyncNodeNATRules(nodeID uint, manual bool) error {
 						failedCount++
 					} else {
 						successCount++
-						external, _ := ruleData["external"].(float64)
+						external, _ := ruleData["external_port"].(float64)
 						protocol, _ := ruleData["protocol"].(string)
 						key := fmt.Sprintf("%d-%s-%d-%s", node.ID, hostname, int(external), protocol)
 						existingRules[key] = true
@@ -286,12 +286,12 @@ func SyncNodeNATRules(nodeID uint, manual bool) error {
 }
 
 func updateNATCache(node models.Node, data map[string]interface{}) error {
-	hostname, _ := data["hostname"].(string)
-	external, _ := data["external"].(float64)
-	internal, _ := data["internal"].(float64)
+	hostname, _ := data["container_name"].(string)
+	external, _ := data["external_port"].(float64)
+	internal, _ := data["internal_port"].(float64)
 	protocol, _ := data["protocol"].(string)
 	
-	if hostname == "" || external == 0 {
+	if hostname == "" || protocol == "" {
 		return fmt.Errorf("缺少必要字段")
 	}
 

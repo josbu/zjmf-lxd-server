@@ -240,10 +240,11 @@ func SyncNodeProxyConfigs(nodeID uint) error {
 }
 
 func updateProxyCache(node models.Node, data map[string]interface{}) error {
-	hostname, _ := data["hostname"].(string)
+	hostname, _ := data["container_name"].(string)
 	domain, _ := data["domain"].(string)
+	
 	if hostname == "" || domain == "" {
-		return fmt.Errorf("缺少必要字段")
+		return fmt.Errorf("缺少必要字段: hostname=%s, domain=%s", hostname, domain)
 	}
 
 	updates := map[string]interface{}{
@@ -253,9 +254,7 @@ func updateProxyCache(node models.Node, data map[string]interface{}) error {
 	}
 
 	var backendPort int
-	if port, ok := data["backend_port"].(float64); ok {
-		backendPort = int(port)
-	} else if port, ok := data["port"].(float64); ok {
+	if port, ok := data["container_port"].(float64); ok {
 		backendPort = int(port)
 	}
 	updates["backend_port"] = backendPort

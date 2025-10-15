@@ -248,6 +248,11 @@ func DeleteNATRule(c *gin.Context) {
 		})
 		return
 	}
+
+	database.DB.Where("node_id = ? AND container_hostname = ? AND external_port = ? AND protocol = ?",
+		rule.NodeID, rule.ContainerHostname, rule.ExternalPort, rule.Protocol).
+		Delete(&models.NATRuleCache{})
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "删除成功",

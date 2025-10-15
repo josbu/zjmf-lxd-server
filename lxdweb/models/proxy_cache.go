@@ -9,10 +9,10 @@ import (
 // ProxyConfigCache 反向代理配置缓存表
 type ProxyConfigCache struct {
 	ID          uint           `json:"id" gorm:"primaryKey"`
-	NodeID      uint           `json:"node_id" gorm:"index;not null"`
+	NodeID      uint           `json:"node_id" gorm:"not null;uniqueIndex:idx_unique_proxy_cache"`
 	NodeName    string         `json:"node_name" gorm:"size:200"`
-	Hostname    string         `json:"hostname" gorm:"index;size:200;not null"`
-	Domain      string         `json:"domain" gorm:"size:500"`
+	Hostname    string         `json:"hostname" gorm:"size:200;not null;uniqueIndex:idx_unique_proxy_cache"`
+	Domain      string         `json:"domain" gorm:"size:500;uniqueIndex:idx_unique_proxy_cache"`
 	BackendPort int            `json:"backend_port"`
 	SSLEnabled  bool           `json:"ssl_enabled"`
 	Status      string         `json:"status" gorm:"size:50"`
@@ -37,5 +37,13 @@ type ProxySyncTask struct {
 	EndTime      *time.Time     `json:"end_time"`
 	CreatedAt    time.Time      `json:"created_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+func (ProxyConfigCache) TableName() string {
+	return "proxy_config_caches"
+}
+
+func (ProxySyncTask) TableName() string {
+	return "proxy_sync_tasks"
 }
 

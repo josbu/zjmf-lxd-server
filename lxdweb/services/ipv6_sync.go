@@ -243,10 +243,11 @@ func SyncNodeIPv6Bindings(nodeID uint) error {
 }
 
 func updateIPv6Cache(node models.Node, data map[string]interface{}) error {
-	hostname, _ := data["hostname"].(string)
-	ipv6Address, _ := data["ipv6_address"].(string)
+	hostname, _ := data["container_name"].(string)
+	ipv6Address, _ := data["public_ipv6"].(string)
+	
 	if hostname == "" || ipv6Address == "" {
-		return fmt.Errorf("缺少必要字段")
+		return fmt.Errorf("缺少必要字段: hostname=%s, ipv6=%s", hostname, ipv6Address)
 	}
 
 	updates := map[string]interface{}{
