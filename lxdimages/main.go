@@ -16,7 +16,30 @@ import (
 	"lxdimages/tools"
 )
 
+const (
+	Version   = "1.0.1"
+	Developer = "xkatld"
+	RepoURL   = "https://github.com/xkatld/zjmf-lxd-server"
+)
+
 func main() {
+	if len(os.Args) < 2 {
+		showHelp()
+		os.Exit(1)
+	}
+
+	if os.Args[1] == "-h" || os.Args[1] == "--help" {
+		showHelp()
+		os.Exit(0)
+	}
+
+	if os.Args[1] == "-v" || os.Args[1] == "--version" {
+		fmt.Printf("LXD 镜像构建工具 v%s\n", Version)
+		fmt.Printf("开发者: %s\n", Developer)
+		fmt.Printf("项目地址: %s\n", RepoURL)
+		os.Exit(0)
+	}
+
 	if len(os.Args) < 3 {
 		log.Fatal("参数不足，需要: <distro> <version> [-add <tool>] [-name <image_name>] [-export]")
 	}
@@ -24,9 +47,13 @@ func main() {
 	distro := os.Args[1]
 	version := os.Args[2]
 	
+	if err := tools.ValidateDistroVersion(distro, version); err != nil {
+		log.Fatalf("错误: %v", err)
+	}
+	
 	arch := getSystemArch()
 
-	tool := ""
+	var toolsList []string
 	customName := ""
 	exportImage := false
 	
@@ -36,7 +63,11 @@ func main() {
 			if i+1 >= len(os.Args) {
 				log.Fatal("-add 参数后需要指定工具名称")
 			}
-			tool = os.Args[i+1]
+			toolsStr := os.Args[i+1]
+			toolsList = strings.Split(toolsStr, ",")
+			for j := range toolsList {
+				toolsList[j] = strings.TrimSpace(toolsList[j])
+			}
 			i++
 		case "-name":
 			if i+1 >= len(os.Args) {
@@ -49,17 +80,18 @@ func main() {
 		}
 	}
 
+	fmt.Printf(">> LXD 镜像构建工具 v%s by %s\n", Version, Developer)
 	fmt.Printf(">> 开始构建 %s %s (%s)\n", distro, version, arch)
 	
-	if tool == "" {
+	if len(toolsList) == 0 {
 		fmt.Printf(">> 构建基础镜像...\n")
 		if err := buildBasicImage(distro, version, arch, customName, exportImage); err != nil {
 			log.Fatalf("ERROR: 构建失败: %v", err)
 		}
 		fmt.Printf(">> 基础镜像构建完成\n")
 	} else {
-		fmt.Printf(">> 构建带%s工具的镜像...\n", tool)
-		if err := buildImageWithTools(distro, version, arch, tool, customName, exportImage); err != nil {
+		fmt.Printf(">> 构建带工具的镜像 [%s]...\n", strings.Join(toolsList, ", "))
+		if err := buildImageWithTools(distro, version, arch, toolsList, customName, exportImage); err != nil {
 			log.Fatalf("ERROR: 构建失败: %v", err)
 		}
 		fmt.Printf(">> 镜像构建完成\n")
@@ -216,7 +248,7 @@ func buildBasicImage(distro, version, arch, customName string, exportImage bool)
 	return nil
 }
 
-func buildImageWithTools(distro, version, arch, tool, customName string, exportImage bool) error {
+func buildImageWithTools(distro, version, arch string, toolsList []string, customName string, exportImage bool) error {
 
 	fmt.Printf("   下载镜像文件...\n")
 	if err := downloadImageFiles(distro, version, arch); err != nil {
@@ -238,18 +270,28 @@ func buildImageWithTools(distro, version, arch, tool, customName string, exportI
 		cleanupResources(baseName, containerName, "")
 		return fmt.Errorf("运行容器失败: %v", err)
 	}
-	fmt.Printf("   配置%s...\n", tool)
-	if err := configureTool(containerName, distro, tool); err != nil {
-		cleanupFiles()
-		cleanupResources(baseName, containerName, "")
-		return fmt.Errorf("配置%s工具失败: %v", tool, err)
+	
+	for _, tool := range toolsList {
+		fmt.Printf("   配置 %s...\n", tool)
+		if err := configureTool(containerName, distro, version, tool); err != nil {
+			cleanupFiles()
+			cleanupResources(baseName, containerName, "")
+			return fmt.Errorf("配置%s工具失败: %v", tool, err)
+		}
 	}
+	
+	fmt.Printf("   执行最终清理...\n")
+	if err := finalCleanup(containerName, distro); err != nil {
+		fmt.Printf("     警告: 清理过程出现错误: %v\n", err)
+	}
+	
 	fmt.Printf("   构建最终镜像...\n")
 	var finalImageName string
 	if customName != "" {
 		finalImageName = cleanLXCName(customName)
 	} else {
-		finalImageName = cleanLXCName(fmt.Sprintf("%s-%s-%s-%s", distro, version, arch, tool))
+		toolsStr := strings.Join(toolsList, "-")
+		finalImageName = cleanLXCName(fmt.Sprintf("%s-%s-%s-%s", distro, version, arch, toolsStr))
 	}
 	
 	if exportImage {
@@ -598,10 +640,36 @@ func launchLXCContainer(imageName, containerName string) error {
 	return nil
 }
 
-func configureTool(containerName, distro, tool string) error {
+func configureTool(containerName, distro, version, tool string) error {
 	switch tool {
 	case "ssh":
-		return tools.ConfigureSSH(containerName, distro)
+		return tools.ConfigureSSH(containerName, distro, version)
+	case "docker":
+		return tools.ConfigureDocker(containerName, distro, version)
+	case "nodejs":
+		return tools.ConfigureNodejs(containerName, distro, version)
+	case "python":
+		return tools.ConfigurePython(containerName, distro, version)
+	case "nginx":
+		return tools.ConfigureNginx(containerName, distro, version)
+	case "mysql":
+		return tools.ConfigureMysql(containerName, distro, version)
+	case "postgresql":
+		return tools.ConfigurePostgresql(containerName, distro, version)
+	case "java":
+		return tools.ConfigureJava(containerName, distro, version)
+	case "golang":
+		return tools.ConfigureGolang(containerName, distro, version)
+	case "php":
+		return tools.ConfigurePhp(containerName, distro, version)
+	case "redis":
+		return tools.ConfigureRedis(containerName, distro, version)
+	case "mongodb":
+		return tools.ConfigureMongodb(containerName, distro, version)
+	case "apache":
+		return tools.ConfigureApache(containerName, distro, version)
+	case "git":
+		return tools.ConfigureGit(containerName, distro, version)
 	default:
 		return fmt.Errorf("不支持的工具: %s", tool)
 	}
@@ -623,5 +691,127 @@ func cleanupFiles() error {
 	}
 
 	return nil
+}
+
+func finalCleanup(containerName, distro string) error {
+	cleanupCommands := []string{
+		"rm -rf /tmp/* /var/tmp/* /root/.cache",
+		"rm -f /root/.bash_history /root/.wget-hsts",
+		"find /var/log -type f -exec truncate -s 0 {} \\;",
+		"find /root -name '*.log' -delete",
+	}
+
+	switch distro {
+	case "ubuntu", "debian":
+		cleanupCommands = append(cleanupCommands,
+			"apt-get autoremove -y",
+			"apt-get autoclean",
+			"apt-get clean",
+			"rm -rf /var/lib/apt/lists/*",
+			"rm -rf /var/cache/apt/*",
+		)
+	case "centos", "fedora", "almalinux", "rockylinux":
+		cleanupCommands = append(cleanupCommands,
+			"dnf autoremove -y",
+			"dnf clean all",
+			"rm -rf /var/cache/dnf/*",
+		)
+	case "oracle", "amazonlinux":
+		cleanupCommands = append(cleanupCommands,
+			"yum autoremove -y",
+			"yum clean all",
+			"rm -rf /var/cache/yum/*",
+		)
+	case "alpine":
+		cleanupCommands = append(cleanupCommands,
+			"rm -rf /var/cache/apk/*",
+			"rm -rf /etc/apk/cache/*",
+		)
+	case "opensuse":
+		cleanupCommands = append(cleanupCommands,
+			"zypper clean -a",
+			"rm -rf /var/cache/zypp/*",
+		)
+	}
+
+	cleanupCommands = append(cleanupCommands,
+		"history -c",
+		"rm -f /root/.bash_history",
+		"sync",
+	)
+
+	for _, cmdStr := range cleanupCommands {
+		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		cmd.Run()
+	}
+
+	return nil
+}
+
+func showHelp() {
+	fmt.Println("┌───────────────────────────────────────────────────────────────┐")
+	fmt.Printf("│  LXD 镜像构建工具 v%-39s│\n", Version)
+	fmt.Printf("│  开发者: %-49s│\n", Developer)
+	fmt.Printf("│  项目地址: %-47s│\n", RepoURL)
+	fmt.Println("└───────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+	fmt.Println("用法:")
+	fmt.Println("  lxdimages <distro> <version> [选项]")
+	fmt.Println()
+	fmt.Println("选项:")
+	fmt.Println("  -add <tool>       添加工具集(可用逗号分隔多个，如: ssh,mysql,nodejs)")
+	fmt.Println("                    支持的工具:")
+	fmt.Println("                      ssh        - SSH 服务器")
+	fmt.Println("                      docker     - Docker 容器引擎(系统源)")
+	fmt.Println("                      nodejs     - Node.js(系统源)")
+	fmt.Println("                      python     - Python3(系统源)")
+	fmt.Println("                      java       - OpenJDK(系统源)")
+	fmt.Println("                      golang     - Go 语言(系统源)")
+	fmt.Println("                      php        - PHP + Composer(系统源)")
+	fmt.Println("                      nginx      - Nginx Web 服务器")
+	fmt.Println("                      apache     - Apache HTTP 服务器")
+	fmt.Println("                      mysql      - MySQL 数据库(系统源)")
+	fmt.Println("                      postgresql - PostgreSQL 数据库(系统源)")
+	fmt.Println("                      redis      - Redis 缓存服务器")
+	fmt.Println("                      mongodb    - MongoDB 数据库(系统源)")
+	fmt.Println("                      git        - Git 版本控制工具")
+	fmt.Println("  -name <name>      自定义镜像名称")
+	fmt.Println("  -export           导出镜像为 tar.gz 文件")
+	fmt.Println("  -h, --help        显示帮助信息")
+	fmt.Println("  -v, --version     显示版本信息")
+	fmt.Println()
+	fmt.Println("支持的发行版和版本:")
+	
+	distros := []string{"ubuntu", "debian", "centos", "fedora", "almalinux", "rockylinux", "oracle", "opensuse", "alpine", "amazonlinux"}
+	for _, distro := range distros {
+		if versions, ok := tools.SupportedDistros[distro]; ok {
+			fmt.Printf("  %-15s %s\n", distro+":", strings.Join(versions, ", "))
+		}
+	}
+	
+	fmt.Println()
+	fmt.Println("示例:")
+	fmt.Println("  # 基础镜像")
+	fmt.Println("  lxdimages ubuntu jammy")
+	fmt.Println()
+	fmt.Println("  # 单个工具")
+	fmt.Println("  lxdimages ubuntu noble -add ssh")
+	fmt.Println("  lxdimages debian bookworm -add nodejs")
+	fmt.Println()
+	fmt.Println("  # 多个工具组合")
+	fmt.Println("  lxdimages ubuntu jammy -add ssh,mysql,nginx")
+	fmt.Println("  lxdimages debian bookworm -add ssh,nodejs,redis")
+	fmt.Println("  lxdimages centos 9-Stream -add ssh,python,postgresql")
+	fmt.Println()
+	fmt.Println("  # 完整LAMP环境")
+	fmt.Println("  lxdimages ubuntu noble -add ssh,apache,mysql,php")
+	fmt.Println()
+	fmt.Println("  # 完整开发环境")
+	fmt.Println("  lxdimages debian trixie -add ssh,git,nodejs,python,redis")
+	fmt.Println()
+	fmt.Println("  # 导出镜像")
+	fmt.Println("  lxdimages alpine 3.22 -add ssh,docker -export")
 }
 

@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -13,37 +14,133 @@ type SSHConfig struct {
 	CleanupCommands []string
 }
 
+type DistroVersion struct {
+	Distro  string
+	Version string
+}
+
+var SupportedDistros = map[string][]string{
+	"ubuntu":      {"jammy", "noble", "plucky"},
+	"debian":      {"bullseye", "bookworm", "trixie"},
+	"centos":      {"9-Stream", "10-Stream"},
+	"fedora":      {"40", "41", "42"},
+	"almalinux":   {"8", "9", "10"},
+	"rockylinux":  {"8", "9", "10"},
+	"oracle":      {"7", "8", "9"},
+	"opensuse":    {"15.5", "15.6", "tumbleweed"},
+	"alpine":      {"3.19", "3.20", "3.21", "3.22", "edge"},
+	"amazonlinux": {"2", "2023"},
+}
+
+func ValidateDistroVersion(distro, version string) error {
+	versions, exists := SupportedDistros[distro]
+	if !exists {
+		return fmt.Errorf("不支持的发行版: %s，支持的发行版: ubuntu, debian, centos, fedora, almalinux, rockylinux, oracle, opensuse, alpine, amazonlinux", distro)
+	}
+
+	for _, v := range versions {
+		if v == version {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("不支持的 %s 版本: %s，支持的版本: %s", distro, version, strings.Join(versions, ", "))
+}
+
+func getVersionSpecificOptimizations(distro, version string) []string {
+	key := distro + ":" + version
+	
+	optimizations := map[string][]string{
+		"centos:9-Stream": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"centos:10-Stream": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"almalinux:8": {
+			"dnf config-manager --set-enabled powertools 2>/dev/null || true",
+		},
+		"almalinux:9": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"almalinux:10": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"rockylinux:8": {
+			"dnf config-manager --set-enabled powertools 2>/dev/null || true",
+		},
+		"rockylinux:9": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"rockylinux:10": {
+			"dnf config-manager --set-enabled crb 2>/dev/null || true",
+		},
+		"oracle:7": {
+			"yum-config-manager --enable ol7_optional_latest 2>/dev/null || true",
+		},
+		"oracle:8": {
+			"dnf config-manager --set-enabled ol8_codeready_builder 2>/dev/null || true",
+		},
+		"oracle:9": {
+			"dnf config-manager --set-enabled ol9_codeready_builder 2>/dev/null || true",
+		},
+	}
+	
+	if opts, exists := optimizations[key]; exists {
+		return opts
+	}
+	
+	return []string{}
+}
+
 func GetSSHConfig(distro string) SSHConfig {
 	config := SSHConfig{}
 
 	switch distro {
-	case "ubuntu", "debian":
+	case "ubuntu":
 		config.InstallCommands = []string{
-			"apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server sudo",
+			"apt-get update -qq",
+			"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server sudo ca-certificates",
+		}
+	case "debian":
+		config.InstallCommands = []string{
+			"apt-get update -qq",
+			"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server sudo ca-certificates",
 		}
 	case "centos":
 		config.InstallCommands = []string{
-			"if command -v dnf >/dev/null 2>&1; then dnf install -y openssh-server sudo; else yum install -y openssh-server sudo; fi",
+			"dnf install -y openssh-server sudo ca-certificates",
 		}
-	case "fedora", "rhel", "almalinux", "rockylinux", "oraclelinux":
+	case "fedora":
 		config.InstallCommands = []string{
-			"dnf install -y openssh-server sudo",
+			"dnf install -y openssh-server sudo ca-certificates",
+		}
+	case "almalinux", "rockylinux":
+		config.InstallCommands = []string{
+			"dnf install -y openssh-server sudo ca-certificates",
+		}
+	case "oracle":
+		config.InstallCommands = []string{
+			"yum install -y openssh-server sudo ca-certificates",
 		}
 	case "alpine":
 		config.InstallCommands = []string{
-			"apk update -q && apk add -q openssh-server sudo bash",
+			"apk update -q",
+			"apk add -q openssh-server sudo bash ca-certificates",
 		}
 	case "opensuse":
 		config.InstallCommands = []string{
-			"zypper refresh -q && zypper install -y openssh-server sudo",
+			"zypper refresh -q",
+			"zypper install -y openssh-server sudo ca-certificates",
 		}
 	case "amazonlinux":
 		config.InstallCommands = []string{
-			"yum update -y -q && yum install -y openssh-server sudo",
+			"yum update -y -q",
+			"yum install -y openssh-server sudo ca-certificates",
 		}
 	default:
 		config.InstallCommands = []string{
-			"if command -v apt-get >/dev/null 2>&1; then apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server sudo; elif command -v dnf >/dev/null 2>&1; then dnf install -y openssh-server sudo; elif command -v yum >/dev/null 2>&1; then yum install -y openssh-server sudo; elif command -v apk >/dev/null 2>&1; then apk update -q && apk add -q openssh-server sudo bash; fi",
+			"echo '不支持的发行版' && exit 1",
 		}
 	}
 
@@ -55,45 +152,84 @@ func GetSSHConfig(distro string) SSHConfig {
 
 	var sshConfigCommands []string
 	switch distro {
-	case "alpine":
+	case "ubuntu", "debian":
 		sshConfigCommands = []string{
-			"cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak",
-			`cat > /etc/ssh/sshd_config << 'EOF'
-Port 22
-PermitRootLogin yes
-PubkeyAuthentication yes
-AuthorizedKeysFile .ssh/authorized_keys
-PasswordAuthentication yes
-UsePAM no
-AllowTcpForwarding yes
-X11Forwarding no
-Subsystem sftp internal-sftp
-EOF`,
-		}
-		baseConfigCommands = append(baseConfigCommands, "echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' >> /root/.bashrc")
-	case "amazonlinux":
-		sshConfigCommands = []string{
-			"sed -i 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
-			"sed -i 's/#*UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config",
-			"sed -i '/GatewayPort/d' /etc/ssh/sshd_config",
-			"sed -i '/GatewayPorts/d' /etc/ssh/sshd_config",
+		}
+	case "centos", "fedora":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
+		}
+	case "almalinux", "rockylinux":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
+		}
+	case "oracle":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
+		}
+	case "alpine":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
+		}
+	case "opensuse":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
+		}
+	case "amazonlinux":
+		sshConfigCommands = []string{
+			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
 		}
 	default:
 		sshConfigCommands = []string{
-			"sed -i 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
-			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
-			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
-			"sed -i 's/#*UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config",
-			"sed -i '/GatewayPort[^s]/d' /etc/ssh/sshd_config",
+			"echo '不支持的发行版配置' && exit 1",
 		}
 	}
 	config.ConfigCommands = append(baseConfigCommands, sshConfigCommands...)
 
 	switch distro {
+	case "ubuntu", "debian":
+		config.EnableCommands = []string{
+			"ssh-keygen -A",
+			"sshd -t",
+			"systemctl enable ssh",
+			"systemctl start ssh",
+		}
+	case "centos", "fedora", "almalinux", "rockylinux":
+		config.EnableCommands = []string{
+			"ssh-keygen -A",
+			"sshd -t",
+			"systemctl enable sshd",
+			"systemctl start sshd",
+		}
+	case "oracle":
+		config.EnableCommands = []string{
+			"ssh-keygen -A",
+			"sshd -t",
+			"systemctl enable sshd",
+			"systemctl start sshd",
+		}
 	case "alpine":
 		config.EnableCommands = []string{
 			"ssh-keygen -A",
@@ -101,7 +237,14 @@ EOF`,
 			"rc-update add sshd default",
 			"rc-service sshd start",
 		}
-	case "amazonlinux", "centos", "fedora", "rhel", "almalinux", "rockylinux", "oraclelinux":
+	case "opensuse":
+		config.EnableCommands = []string{
+			"ssh-keygen -A",
+			"sshd -t",
+			"systemctl enable sshd",
+			"systemctl start sshd",
+		}
+	case "amazonlinux":
 		config.EnableCommands = []string{
 			"ssh-keygen -A",
 			"sshd -t",
@@ -110,10 +253,7 @@ EOF`,
 		}
 	default:
 		config.EnableCommands = []string{
-			"ssh-keygen -A",
-			"sshd -t",
-			"systemctl enable ssh || systemctl enable sshd",
-			"systemctl start ssh || systemctl start sshd",
+			"echo '不支持的发行版启用命令' && exit 1",
 		}
 	}
 
@@ -123,32 +263,21 @@ EOF`,
 		"rm -rf /tmp/* /var/tmp/*",
 	}
 
-	if distro == "alpine" {
-		baseCleanupCommands = append(baseCleanupCommands,
+	switch distro {
+	case "alpine":
+		config.CleanupCommands = append(baseCleanupCommands,
 			"rc-service sshd stop",
 			"killall sshd 2>/dev/null || true",
 			"pkill -f sshd 2>/dev/null || true",
 		)
+	default:
+		config.CleanupCommands = baseCleanupCommands
 	}
-
-	switch distro {
-	case "ubuntu", "debian":
-		baseCleanupCommands = append(baseCleanupCommands, "apt-get clean", "rm -rf /var/lib/apt/lists/*")
-	case "centos", "fedora", "rhel", "almalinux", "rockylinux", "oraclelinux":
-		baseCleanupCommands = append(baseCleanupCommands, "if command -v dnf >/dev/null 2>&1; then dnf clean all; else yum clean all; fi")
-	case "alpine":
-		baseCleanupCommands = append(baseCleanupCommands, "rm -rf /var/cache/apk/*")
-	case "opensuse":
-		baseCleanupCommands = append(baseCleanupCommands, "zypper clean -a")
-	case "amazonlinux":
-		baseCleanupCommands = append(baseCleanupCommands, "yum clean all")
-	}
-	config.CleanupCommands = baseCleanupCommands
 
 	return config
 }
 
-func ConfigureSSH(containerName, distro string) error {
+func ConfigureSSH(containerName, distro, version string) error {
 	fmt.Printf("     安装SSH服务...")
 	
 	time.Sleep(3 * time.Second)
@@ -192,7 +321,20 @@ func ConfigureSSH(containerName, distro string) error {
 		cmd.Run()
 	}
 	fmt.Printf(" OK\n")
-	fmt.Printf("     清理缓存...")
+
+	optimizations := getVersionSpecificOptimizations(distro, version)
+	if len(optimizations) > 0 {
+		fmt.Printf("     应用版本优化...")
+		for _, cmdStr := range optimizations {
+			cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+			cmd.Run()
+		}
+		fmt.Printf(" OK\n")
+	}
+
+	fmt.Printf("     清理SSH临时文件...")
 	for _, cmdStr := range config.CleanupCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -206,15 +348,33 @@ func ConfigureSSH(containerName, distro string) error {
 
 func getBaseToolsCommands(distro string) []string {
 	switch distro {
-	case "alpine":
-		return []string{"apk add -q curl wget nano procps"}
-	case "amazonlinux", "centos", "fedora", "rhel", "almalinux", "rockylinux", "oraclelinux":
-		return []string{"if command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano procps-ng; else yum install -y curl wget nano procps-ng; fi"}
 	case "ubuntu", "debian":
-		return []string{"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano procps"}
+		return []string{
+			"DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano procps net-tools",
+		}
+	case "centos", "fedora", "almalinux", "rockylinux":
+		return []string{
+			"dnf install -y curl wget nano procps-ng net-tools",
+		}
+	case "oracle":
+		return []string{
+			"yum install -y curl wget nano procps-ng net-tools",
+		}
+	case "alpine":
+		return []string{
+			"apk add -q curl wget nano procps net-tools",
+		}
 	case "opensuse":
-		return []string{"zypper install -y curl wget nano procps"}
+		return []string{
+			"zypper install -y curl wget nano procps net-tools",
+		}
+	case "amazonlinux":
+		return []string{
+			"yum install -y curl wget nano procps-ng net-tools",
+		}
 	default:
-		return []string{"if command -v apk >/dev/null 2>&1; then apk add -q curl wget nano procps; elif command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget nano procps; elif command -v dnf >/dev/null 2>&1; then dnf install -y curl wget nano procps-ng; elif command -v yum >/dev/null 2>&1; then yum install -y curl wget nano procps-ng; fi"}
+		return []string{
+			"echo '不支持的发行版工具安装' && exit 1",
+		}
 	}
 }
