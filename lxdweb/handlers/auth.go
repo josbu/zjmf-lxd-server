@@ -6,6 +6,13 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
+// LoginPage 登录页面
+// @Summary 登录页面
+// @Description 显示登录页面
+// @Tags 认证管理
+// @Produce html
+// @Success 200 {string} string "HTML页面"
+// @Router /login [get]
 func LoginPage(c *gin.Context) {
 	session := sessions.Default(c)
 	if adminID := session.Get("admin_id"); adminID != nil {
@@ -16,6 +23,17 @@ func LoginPage(c *gin.Context) {
 		"title": "登录 - LXD管理后台",
 	})
 }
+// Login 用户登录
+// @Summary 用户登录
+// @Description 验证用户名、密码和验证码，登录成功后创建会话
+// @Tags 认证管理
+// @Accept json
+// @Produce json
+// @Param body body object true "登录参数(username, password, captcha)"
+// @Success 200 {object} map[string]interface{} "登录成功"
+// @Failure 400 {object} map[string]interface{} "参数错误或验证码错误"
+// @Failure 401 {object} map[string]interface{} "用户名或密码错误"
+// @Router /api/login [post]
 func Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" form:"username" binding:"required"`
@@ -79,6 +97,13 @@ func Login(c *gin.Context) {
 		},
 	})
 }
+// Logout 用户登出
+// @Summary 用户登出
+// @Description 清除用户会话，退出登录
+// @Tags 认证管理
+// @Produce json
+// @Success 200 {object} map[string]interface{} "退出成功"
+// @Router /api/logout [post]
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()

@@ -1,155 +1,53 @@
 package handlers
 
 import (
-	"net/http"
-	"strconv"
-
-	"lxdweb/database"
-	"lxdweb/models"
 	"lxdweb/services"
+	"net/http"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
-func SyncAllNodes(c *gin.Context) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 401,
-			"msg":  "未登录",
-		})
-		return
-	}
-
-	go services.SyncAllNodesAsync()
-
+// GetAutoSyncStatus 获取自动同步状态
+// @Summary 获取自动同步状态
+// @Description 查询自动同步服务的启用状态
+// @Tags 系统管理
+// @Produce json
+// @Success 200 {object} map[string]interface{} "返回自动同步状态"
+// @Router /api/auto-sync/status [get]
+func GetAutoSyncStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "同步任务已启动，请稍后刷新页面查看结果",
+		"code":    200,
+		"msg":     "success",
+		"enabled": services.IsAutoSyncEnabled(),
 	})
 }
 
-func SyncNode(c *gin.Context) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 401,
-			"msg":  "未登录",
-		})
-		return
-	}
-
-	nodeIDStr := c.Param("id")
-	nodeID, err := strconv.ParseUint(nodeIDStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "节点ID格式错误",
-		})
-		return
-	}
-
-	var node models.Node
-	if err := database.DB.First(&node, nodeID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "节点不存在",
-		})
-		return
-	}
-
-	if services.IsSyncing(uint(nodeID)) {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 400,
-			"msg":  "该节点正在同步中，请稍后再试",
-		})
-		return
-	}
-
-	go services.SyncNodeContainers(uint(nodeID), true)
-
+// EnableAutoSync 启用自动同步
+// @Summary 启用自动同步
+// @Description 启用自动同步服务，每5分钟自动同步所有节点数据
+// @Tags 系统管理
+// @Produce json
+// @Success 200 {object} map[string]interface{} "启用成功"
+// @Router /api/auto-sync/enable [post]
+func EnableAutoSync(c *gin.Context) {
+	services.EnableAutoSync()
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "同步任务已启动，请稍后刷新页面查看结果",
+		"msg":  "自动同步已启用",
 	})
 }
 
-func GetSyncTasks(c *gin.Context) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 401,
-			"msg":  "未登录",
-		})
-		return
-	}
-
-	var tasks []models.SyncTask
-	database.DB.Order("created_at DESC").Limit(50).Find(&tasks)
-
+// DisableAutoSync 禁用自动同步
+// @Summary 禁用自动同步
+// @Description 禁用自动同步服务，停止定时同步
+// @Tags 系统管理
+// @Produce json
+// @Success 200 {object} map[string]interface{} "禁用成功"
+// @Router /api/auto-sync/disable [post]
+func DisableAutoSync(c *gin.Context) {
+	services.DisableAutoSync()
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "success",
-		"data": tasks,
+		"msg":  "自动同步已禁用",
 	})
 }
-
-func GetSyncStatus(c *gin.Context) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 401,
-			"msg":  "未登录",
-		})
-		return
-	}
-
-	nodeIDStr := c.Query("node_id")
-	
-	var status []map[string]interface{}
-	
-	if nodeIDStr != "" {
-		nodeID, err := strconv.ParseUint(nodeIDStr, 10, 32)
-		if err == nil {
-			isSyncing := services.IsSyncing(uint(nodeID))
-			
-			var lastTask models.SyncTask
-			database.DB.Where("node_id = ?", nodeID).Order("created_at DESC").First(&lastTask)
-			
-			status = append(status, map[string]interface{}{
-				"node_id":   uint(nodeID),
-				"syncing":   isSyncing,
-				"last_task": lastTask,
-			})
-		}
-	} else {
-		var nodes []models.Node
-		database.DB.Find(&nodes)
-		
-		for _, node := range nodes {
-			isSyncing := services.IsSyncing(node.ID)
-			
-			var lastTask models.SyncTask
-			database.DB.Where("node_id = ?", node.ID).Order("created_at DESC").First(&lastTask)
-			
-			status = append(status, map[string]interface{}{
-				"node_id":   node.ID,
-				"node_name": node.Name,
-				"syncing":   isSyncing,
-				"last_task": lastTask,
-			})
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "success",
-		"data": status,
-	})
-}
-

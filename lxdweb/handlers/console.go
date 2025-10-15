@@ -10,6 +10,18 @@ import (
 	"net/http"
 	"github.com/gin-gonic/gin"
 )
+// CreateConsoleToken 创建控制台令牌
+// @Summary 创建控制台令牌
+// @Description 为指定容器创建Web控制台访问令牌
+// @Tags 容器管理
+// @Accept json
+// @Produce json
+// @Param body body object true "容器信息(hostname, node_id)"
+// @Success 200 {object} map[string]interface{} "成功返回令牌和控制台URL"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Failure 500 {object} map[string]interface{} "创建失败"
+// @Router /api/console/create-token [post]
 func CreateConsoleToken(c *gin.Context) {
 	var req struct {
 		Hostname string `json:"hostname" binding:"required"`

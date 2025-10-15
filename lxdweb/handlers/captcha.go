@@ -6,6 +6,14 @@ import (
 	"github.com/mojocn/base64Captcha"
 )
 var store = base64Captcha.DefaultMemStore
+// GetCaptcha 获取验证码
+// @Summary 获取验证码
+// @Description 生成登录验证码图片
+// @Tags 认证管理
+// @Produce json
+// @Success 200 {object} map[string]interface{} "成功返回验证码"
+// @Failure 500 {object} map[string]interface{} "生成失败"
+// @Router /api/captcha [get]
 func GetCaptcha(c *gin.Context) {
 	driver := base64Captcha.NewDriverDigit(80, 240, 4, 0.7, 80)
 	captcha := base64Captcha.NewCaptcha(driver, store)

@@ -1,3 +1,23 @@
+// @title LXD Web 管理平台
+// @version 1.0.1
+// @description LXD 容器管理 Web 平台，提供多节点管理、容器监控、NAT 配置等功能
+// @termsOfService https://github.com/xkatld/zjmf-lxd-server
+
+// @contact.name xkatld
+// @contact.url https://github.com/xkatld/zjmf-lxd-server
+// @contact.email xkatld@example.com
+
+// @license.name MIT
+// @license.url https://github.com/xkatld/zjmf-lxd-server/blob/main/LICENSE
+
+// @host localhost:3000
+// @BasePath /
+
+// @securityDefinitions.basic BasicAuth
+// @in header
+// @name Authorization
+// @description 基于 Session 的认证
+
 package main
 import (
 	"bufio"
@@ -8,13 +28,18 @@ import (
 	"syscall"
 	"lxdweb/config"
 	"lxdweb/database"
+	_ "lxdweb/docs"
 	"lxdweb/handlers"
 	"lxdweb/middleware"
 	"lxdweb/models"
+	"lxdweb/pkg/logger"
 	"lxdweb/services"
+	"lxdweb/utils"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 )
@@ -27,15 +52,31 @@ func main() {
 }
 func startWebServer() {
 	if err := config.LoadConfig(); err != nil {
-		log.Fatalf("❌ 配置加载失败: %v", err)
+		log.Fatalf("[ERROR] 配置加载失败: %v", err)
 	}
+	
+	zapLogger, err := utils.InitLogger(
+		config.AppConfig.Logging.File,
+		config.AppConfig.Logging.MaxSize,
+		config.AppConfig.Logging.MaxBackups,
+		config.AppConfig.Logging.MaxAge,
+		config.AppConfig.Logging.Compress,
+		config.AppConfig.Logging.Level,
+		config.AppConfig.Logging.DevMode,
+	)
+	if err != nil {
+		log.Fatalf("[ERROR] 日志系统初始化失败: %v", err)
+	}
+	
+	logger.Init(zapLogger)
+	log.Printf("[LOGGER] 日志系统初始化完成: 级别=%s, 文件=%s", config.AppConfig.Logging.Level, config.AppConfig.Logging.File)
+	
 	database.InitDB()
 	database.CheckAdminExists()
 
 	go services.StartContainerSyncService()
-
 	go services.StartNATSyncService()
-
+	go services.StartAutoSyncService()
 	go services.StartNodeCacheService()
 	
 	gin.SetMode(config.AppConfig.Server.Mode)
@@ -43,6 +84,9 @@ func startWebServer() {
 	r.LoadHTMLGlob("templates/*")
 	store := cookie.NewStore([]byte(config.AppConfig.Server.SessionSecret))
 	r.Use(sessions.Sessions("lxdweb_session", store))
+	
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	
 	r.GET("/", handlers.LoginPage)
 	r.GET("/login", handlers.LoginPage)
 	r.POST("/login", handlers.Login)
@@ -59,14 +103,17 @@ func startWebServer() {
 		auth.PUT("/api/nodes/:id", handlers.UpdateNode)
 		auth.DELETE("/api/nodes/:id", handlers.DeleteNode)
 		auth.POST("/api/nodes/:id/test", handlers.TestNode)
+		auth.POST("/api/nodes/:id/refresh", handlers.RefreshNodeCache)
 		auth.GET("/containers", handlers.ContainersPage)
 		auth.GET("/api/containers", handlers.GetContainers)
+		auth.GET("/api/containers/cache", handlers.GetContainersFromCache)
 		auth.GET("/nat", handlers.NATPage)
 		auth.GET("/api/containers/:name", handlers.GetContainerDetail)
 		auth.POST("/api/containers/:name/start", handlers.StartContainer)
 		auth.POST("/api/containers/:name/stop", handlers.StopContainer)
 		auth.POST("/api/containers/:name/restart", handlers.RestartContainer)
 		auth.POST("/api/containers/:name/delete", handlers.DeleteContainer)
+		auth.POST("/api/containers/:name/refresh", handlers.RefreshSingleContainer)
 		auth.POST("/api/containers/create", handlers.CreateContainer)
 		auth.GET("/api/nat", handlers.GetNATRules)
 		auth.GET("/api/nat/:id", handlers.GetNATRule)
@@ -86,6 +133,30 @@ func startWebServer() {
 		auth.GET("/api/nat-sync/tasks", handlers.GetNATSyncTasks)
 		auth.GET("/api/nat-sync/status", handlers.GetNATSyncStatus)
 		auth.GET("/api/nat/cache", handlers.GetNATRulesFromCache)
+
+		auth.GET("/ipv6", handlers.IPv6Page)
+		auth.GET("/api/ipv6", handlers.GetIPv6Bindings)
+		auth.POST("/api/ipv6", handlers.CreateIPv6Binding)
+		auth.DELETE("/api/ipv6/:id", handlers.DeleteIPv6Binding)
+		auth.POST("/api/ipv6/sync", handlers.SyncIPv6Bindings)
+		auth.GET("/api/ipv6/cache", handlers.GetIPv6BindingsFromCache)
+		auth.POST("/api/ipv6-sync/all", handlers.SyncAllIPv6)
+		auth.GET("/api/ipv6-sync/status", handlers.GetIPv6SyncStatus)
+		auth.GET("/api/ipv6-sync/tasks", handlers.GetIPv6SyncTasks)
+
+		auth.GET("/proxy", handlers.ProxyPage)
+		auth.GET("/api/proxy-configs", handlers.GetProxyConfigs)
+		auth.POST("/api/proxy-configs", handlers.CreateProxyConfig)
+		auth.DELETE("/api/proxy-configs/:id", handlers.DeleteProxyConfig)
+		auth.POST("/api/proxy-configs/sync", handlers.SyncProxyConfigs)
+		auth.GET("/api/proxy-configs/cache", handlers.GetProxyConfigsFromCache)
+		auth.POST("/api/proxy-sync/all", handlers.SyncAllProxy)
+		auth.GET("/api/proxy-sync/status", handlers.GetProxySyncStatus)
+		auth.GET("/api/proxy-sync/tasks", handlers.GetProxySyncTasks)
+
+		auth.GET("/api/auto-sync/status", handlers.GetAutoSyncStatus)
+		auth.POST("/api/auto-sync/enable", handlers.EnableAutoSync)
+		auth.POST("/api/auto-sync/disable", handlers.DisableAutoSync)
 	}
 	r.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
@@ -97,8 +168,23 @@ func startWebServer() {
 	})
 	addr := config.AppConfig.Server.Address
 	
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("❌ 服务器启动失败: %v", err)
+	if config.AppConfig.Server.EnableHTTPS {
+		certFile := config.AppConfig.Server.CertFile
+		keyFile := config.AppConfig.Server.KeyFile
+		
+		if err := utils.GenerateSelfSignedCert(certFile, keyFile); err != nil {
+			log.Fatalf("[ERROR] 证书生成失败: %v", err)
+		}
+		
+		log.Printf("[SERVER] HTTPS 服务器启动: https://%s", addr)
+		if err := r.RunTLS(addr, certFile, keyFile); err != nil {
+			log.Fatalf("[ERROR] HTTPS 服务器启动失败: %v", err)
+		}
+	} else {
+		log.Printf("[WARN] HTTP 服务器启动 (不安全): http://%s", addr)
+		if err := r.Run(addr); err != nil {
+			log.Fatalf("[ERROR] HTTP 服务器启动失败: %v", err)
+		}
 	}
 }
 func handleAdminCommand() {
@@ -129,14 +215,14 @@ func printAdminUsage() {
 	fmt.Println("LXD Web 管理员账号管理")
 	fmt.Println("")
 	fmt.Println("用法:")
-	fmt.Println("  ./lxdweb-amd64 admin create          创建新管理员")
-	fmt.Println("  ./lxdweb-amd64 admin password        修改管理员密码")
-	fmt.Println("  ./lxdweb-amd64 admin list            列出所有管理员")
-	fmt.Println("  ./lxdweb-amd64 admin delete          删除管理员")
+	fmt.Println("  lxdweb admin create          创建新管理员")
+	fmt.Println("  lxdweb admin password        修改管理员密码")
+	fmt.Println("  lxdweb admin list            列出所有管理员")
+	fmt.Println("  lxdweb admin delete          删除管理员")
 	fmt.Println("")
 	fmt.Println("示例:")
-	fmt.Println("  ./lxdweb-amd64 admin create")
-	fmt.Println("  ./lxdweb-amd64 admin password")
+	fmt.Println("  lxdweb admin create")
+	fmt.Println("  lxdweb admin password")
 }
 func createAdmin() {
 	reader := bufio.NewReader(os.Stdin)
@@ -186,7 +272,7 @@ func createAdmin() {
 	if err := database.DB.Create(&admin).Error; err != nil {
 		log.Fatal("创建管理员失败:", err)
 	}
-	fmt.Printf("\n✓ 管理员 '%s' 创建成功\n", username)
+	fmt.Printf("\n[SUCCESS] 管理员 '%s' 创建成功\n", username)
 }
 func changePassword() {
 	reader := bufio.NewReader(os.Stdin)
@@ -228,7 +314,7 @@ func changePassword() {
 	if err := database.DB.Save(&admin).Error; err != nil {
 		log.Fatal("修改密码失败:", err)
 	}
-	fmt.Printf("\n✓ 管理员 '%s' 密码修改成功\n", username)
+	fmt.Printf("\n[SUCCESS] 管理员 '%s' 密码修改成功\n", username)
 }
 func listAdmins() {
 	var admins []models.Admin
@@ -271,5 +357,5 @@ func deleteAdmin() {
 	if err := database.DB.Delete(&admin).Error; err != nil {
 		log.Fatal("删除失败:", err)
 	}
-	fmt.Printf("\n✓ 管理员 '%s' 已删除\n", username)
+	fmt.Printf("\n[SUCCESS] 管理员 '%s' 已删除\n", username)
 }

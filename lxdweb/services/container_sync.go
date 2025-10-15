@@ -23,31 +23,151 @@ var (
 )
 
 func StartContainerSyncService() {
-	syncInterval := getSyncInterval()
-	log.Printf("✓ 容器同步服务启动，同步间隔: %d秒", syncInterval)
-
-	time.Sleep(10 * time.Second)
-	SyncAllNodesAsync()
-
-	ticker := time.NewTicker(time.Duration(syncInterval) * time.Second)
-	go func() {
-		for range ticker.C {
-			SyncAllNodesAsync()
-		}
-	}()
+	log.Println("[SYNC] 容器同步服务就绪")
 }
 
+// SyncAllNodesAsync 同步所有活动节点的容器
 func SyncAllNodesAsync() {
 	var nodes []models.Node
 	database.DB.Where("status = ?", "active").Find(&nodes)
 	
-	log.Printf("[SYNC] 开始同步 %d 个活动节点", len(nodes))
+	log.Printf("[SYNC] 开始实时同步 %d 个活动节点", len(nodes))
 	
-	for _, node := range nodes {
-		go SyncNodeContainers(node.ID, false)
+	for i, node := range nodes {
+		log.Printf("[SYNC] 处理节点 %d/%d: %s", i+1, len(nodes), node.Name)
+		SyncNodeContainers(node.ID, false)
+		
+		if i < len(nodes)-1 {
+			interval := time.Duration(node.BatchInterval) * time.Second
+			log.Printf("[SYNC] 等待 %v 后处理下一个节点", interval)
+			time.Sleep(interval)
+		}
 	}
+	
+	log.Printf("[SYNC] 所有节点实时同步完成")
 }
 
+func RefreshNodeContainers(nodeID uint, manual bool) error {
+	syncMutex.Lock()
+	if syncRunning[nodeID] {
+		syncMutex.Unlock()
+		return fmt.Errorf("节点 %d 正在同步中", nodeID)
+	}
+	syncRunning[nodeID] = true
+	syncMutex.Unlock()
+	
+	defer func() {
+		syncMutex.Lock()
+		syncRunning[nodeID] = false
+		syncMutex.Unlock()
+	}()
+	
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		return fmt.Errorf("节点不存在: %v", err)
+	}
+
+	now := time.Now()
+	task := models.SyncTask{
+		NodeID:     node.ID,
+		NodeName:   node.Name,
+		Status:     "running",
+		StartTime:  &now,
+	}
+	database.DB.Create(&task)
+	
+	log.Printf("[REFRESH] 开始刷新节点 %s (ID: %d)%s", node.Name, node.ID, map[bool]string{true: " [手动]", false: ""}[manual])
+
+	listResult := callNodeAPI(node, "GET", "/api/cache/containers", nil)
+	if listResult["code"] != float64(200) {
+		task.Status = "failed"
+		task.ErrorMessage = fmt.Sprintf("获取容器缓存失败: %v", listResult["msg"])
+		endTime := time.Now()
+		task.EndTime = &endTime
+		database.DB.Save(&task)
+
+		log.Printf("[REFRESH] 节点 %s 获取缓存失败，清理旧缓存数据", node.Name)
+		database.DB.Unscoped().Where("node_id = ?", node.ID).Delete(&models.ContainerCache{})
+		
+		return fmt.Errorf("获取容器缓存失败")
+	}
+	
+	data, ok := listResult["data"].([]interface{})
+	if !ok {
+		task.Status = "failed"
+		task.ErrorMessage = "容器列表格式错误"
+		endTime := time.Now()
+		task.EndTime = &endTime
+		database.DB.Save(&task)
+
+		log.Printf("[REFRESH] 节点 %s 返回数据格式错误，清理旧缓存数据", node.Name)
+		database.DB.Unscoped().Where("node_id = ?", node.ID).Delete(&models.ContainerCache{})
+		
+		return fmt.Errorf("容器列表格式错误")
+	}
+	
+	task.TotalCount = len(data)
+	database.DB.Save(&task)
+
+	successCount := 0
+	failedCount := 0
+
+	log.Printf("[REFRESH] 节点 %s 开始处理缓存数据，共 %d 个容器", node.Name, len(data))
+
+	for _, item := range data {
+		container, ok := item.(map[string]interface{})
+		if !ok {
+			failedCount++
+			continue
+		}
+		
+		hostname, _ := container["hostname"].(string)
+		if hostname == "" {
+			failedCount++
+			continue
+		}
+		
+		if err := updateContainerCache(node, container); err != nil {
+			log.Printf("[REFRESH] 更新容器缓存失败 %s: %v", hostname, err)
+			failedCount++
+		} else {
+			successCount++
+		}
+	}
+
+	var cachedContainers []models.ContainerCache
+	database.DB.Where("node_id = ?", node.ID).Find(&cachedContainers)
+	
+	existingHostnames := make(map[string]bool)
+	for _, item := range data {
+		if container, ok := item.(map[string]interface{}); ok {
+			if hostname, ok := container["hostname"].(string); ok {
+				existingHostnames[hostname] = true
+			}
+		}
+	}
+	
+	for _, cached := range cachedContainers {
+		if !existingHostnames[cached.Hostname] {
+			database.DB.Unscoped().Delete(&cached)
+			log.Printf("[REFRESH] 删除不存在的容器缓存: %s", cached.Hostname)
+		}
+	}
+
+	task.Status = "completed"
+	task.SuccessCount = successCount
+	task.FailedCount = failedCount
+	endTime := time.Now()
+	task.EndTime = &endTime
+	database.DB.Save(&task)
+	
+	log.Printf("[REFRESH] 节点 %s 刷新完成: 成功 %d, 失败 %d, 总计 %d", 
+		node.Name, successCount, failedCount, task.TotalCount)
+	
+	return nil
+}
+
+// SyncNodeContainers 实时同步单个节点的容器信息
 func SyncNodeContainers(nodeID uint, manual bool) error {
 	syncMutex.Lock()
 	if syncRunning[nodeID] {
@@ -77,33 +197,29 @@ func SyncNodeContainers(nodeID uint, manual bool) error {
 	}
 	database.DB.Create(&task)
 	
-	log.Printf("[SYNC] 开始同步节点 %s (ID: %d)%s", node.Name, node.ID, map[bool]string{true: " [手动]", false: ""}[manual])
+	log.Printf("[SYNC] 开始实时同步节点 %s (ID: %d)%s", node.Name, node.ID, map[bool]string{true: " [手动]", false: ""}[manual])
 
-	listResult := callNodeAPI(node, "GET", "/api/list", nil)
-	if listResult["code"] != float64(200) {
+	cacheResult := callNodeAPI(node, "GET", "/api/cache/containers", nil)
+	if cacheResult["code"] != float64(200) {
 		task.Status = "failed"
-		task.ErrorMessage = fmt.Sprintf("获取容器列表失败: %v", listResult["msg"])
+		task.ErrorMessage = fmt.Sprintf("获取容器列表失败: %v", cacheResult["msg"])
 		endTime := time.Now()
 		task.EndTime = &endTime
 		database.DB.Save(&task)
-
-		log.Printf("[SYNC] 节点 %s 连接失败，清理旧缓存数据", node.Name)
-		database.DB.Unscoped().Where("node_id = ?", node.ID).Delete(&models.ContainerCache{})
 		
+		log.Printf("[SYNC] 节点 %s 获取容器列表失败", node.Name)
 		return fmt.Errorf("获取容器列表失败")
 	}
 	
-	data, ok := listResult["data"].([]interface{})
+	data, ok := cacheResult["data"].([]interface{})
 	if !ok {
 		task.Status = "failed"
 		task.ErrorMessage = "容器列表格式错误"
 		endTime := time.Now()
 		task.EndTime = &endTime
 		database.DB.Save(&task)
-
-		log.Printf("[SYNC] 节点 %s 返回数据格式错误，清理旧缓存数据", node.Name)
-		database.DB.Unscoped().Where("node_id = ?", node.ID).Delete(&models.ContainerCache{})
 		
+		log.Printf("[SYNC] 节点 %s 容器列表格式错误", node.Name)
 		return fmt.Errorf("容器列表格式错误")
 	}
 	
@@ -113,10 +229,17 @@ func SyncNodeContainers(nodeID uint, manual bool) error {
 	successCount := 0
 	failedCount := 0
 
-	batchSize := getBatchSize()
-	batchInterval := getBatchInterval()
-	
-	log.Printf("[SYNC] 节点 %s 开始分批同步，批量大小: %d, 间隔: %ds", node.Name, batchSize, batchInterval)
+	log.Printf("[SYNC] 节点 %s 开始实时同步，共 %d 个容器，批次大小: %d, 批次间隔: %d秒", 
+		node.Name, len(data), node.BatchSize, node.BatchInterval)
+
+	batchSize := node.BatchSize
+	if batchSize <= 0 {
+		batchSize = 5
+	}
+	batchInterval := time.Duration(node.BatchInterval) * time.Second
+	if node.BatchInterval <= 0 {
+		batchInterval = 5 * time.Second
+	}
 
 	for i := 0; i < len(data); i += batchSize {
 		end := i + batchSize
@@ -125,83 +248,67 @@ func SyncNodeContainers(nodeID uint, manual bool) error {
 		}
 		
 		batch := data[i:end]
-		batchNum := (i / batchSize) + 1
-		totalBatches := (len(data) + batchSize - 1) / batchSize
+		log.Printf("[SYNC] 处理容器批次 %d-%d/%d", i+1, end, len(data))
 		
-		log.Printf("[SYNC] 节点 %s 处理第 %d/%d 批 (容器 %d-%d/%d)",
-			node.Name, batchNum, totalBatches, i+1, end, len(data))
-
 		var wg sync.WaitGroup
-		resultChan := make(chan map[string]interface{}, len(batch))
+		var mu sync.Mutex
 		
 		for _, item := range batch {
 			container, ok := item.(map[string]interface{})
 			if !ok {
+				mu.Lock()
+				failedCount++
+				mu.Unlock()
 				continue
 			}
 			
 			hostname, _ := container["hostname"].(string)
 			if hostname == "" {
+				mu.Lock()
+				failedCount++
+				mu.Unlock()
 				continue
 			}
 			
 			wg.Add(1)
-			go func(hostname string, baseInfo map[string]interface{}) {
+			go func(h string) {
 				defer wg.Done()
 				
-				detailResult := callNodeAPI(node, "GET", fmt.Sprintf("/api/info?hostname=%s", hostname), nil)
-				if detailResult["code"] == float64(200) {
-					if detailData, ok := detailResult["data"].(map[string]interface{}); ok {
-						for k, v := range baseInfo {
-							if _, exists := detailData[k]; !exists {
-								detailData[k] = v
-							}
-						}
-						detailData["hostname"] = hostname
-						resultChan <- detailData
+				log.Printf("[SYNC] 同步容器 %s", h)
+				infoResult := callNodeAPI(node, "GET", fmt.Sprintf("/api/info?hostname=%s", h), nil)
+				
+				if infoResult["code"] != float64(200) {
+					log.Printf("[SYNC] 容器 %s 同步失败: %v", h, infoResult["msg"])
+					mu.Lock()
+					failedCount++
+					mu.Unlock()
+					return
+				}
+				
+				if infoData, ok := infoResult["data"].(map[string]interface{}); ok {
+					if err := updateContainerCache(node, infoData); err != nil {
+						log.Printf("[SYNC] 容器 %s 缓存更新失败: %v", h, err)
+						mu.Lock()
+						failedCount++
+						mu.Unlock()
+					} else {
+						mu.Lock()
+						successCount++
+						mu.Unlock()
 					}
 				} else {
-					baseInfo["hostname"] = hostname
-					resultChan <- baseInfo
+					mu.Lock()
+					failedCount++
+					mu.Unlock()
 				}
-			}(hostname, container)
+			}(hostname)
 		}
 		
-		go func() {
-			wg.Wait()
-			close(resultChan)
-		}()
-
-		for containerData := range resultChan {
-			if err := updateContainerCache(node, containerData); err != nil {
-				log.Printf("[SYNC] 更新容器缓存失败: %v", err)
-				failedCount++
-			} else {
-				successCount++
-			}
-		}
+		wg.Wait()
 		
 		if end < len(data) {
-			time.Sleep(time.Duration(batchInterval) * time.Second)
-		}
-	}
-
-	var cachedContainers []models.ContainerCache
-	database.DB.Where("node_id = ?", node.ID).Find(&cachedContainers)
-	
-	existingHostnames := make(map[string]bool)
-	for _, item := range data {
-		if container, ok := item.(map[string]interface{}); ok {
-			if hostname, ok := container["hostname"].(string); ok {
-				existingHostnames[hostname] = true
-			}
-		}
-	}
-	
-	for _, cached := range cachedContainers {
-		if !existingHostnames[cached.Hostname] {
-			database.DB.Unscoped().Delete(&cached)
-			log.Printf("[SYNC] 删除不存在的容器缓存: %s", cached.Hostname)
+			log.Printf("[SYNC] 等待 %v 后处理下一批", batchInterval)
+			time.Sleep(batchInterval)
 		}
 	}
 
@@ -212,7 +319,7 @@ func SyncNodeContainers(nodeID uint, manual bool) error {
 	task.EndTime = &endTime
 	database.DB.Save(&task)
 	
-	log.Printf("[SYNC] 节点 %s 同步完成: 成功 %d, 失败 %d, 总计 %d", 
+	log.Printf("[SYNC] 节点 %s 实时同步完成: 成功 %d, 失败 %d, 总计 %d", 
 		node.Name, successCount, failedCount, task.TotalCount)
 	
 	return nil

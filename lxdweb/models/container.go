@@ -74,3 +74,25 @@ type UpdateNATRequest struct {
 	Description  string `json:"description"`
 	Status       string `json:"status" binding:"omitempty,oneof=active inactive"`
 }
+
+type CreateIPv6Request struct {
+	NodeID            uint   `json:"node_id" binding:"required"`
+	ContainerHostname string `json:"container_hostname" binding:"required"`
+	Description       string `json:"description"`
+}
+
+type DeleteIPv6Request struct {
+	PublicIPv6 string `json:"public_ipv6" binding:"required"`
+}
+
+type CreateProxyRequest struct {
+	NodeID            uint   `json:"node_id" binding:"required"`
+	ContainerHostname string `json:"container_hostname" binding:"required"`
+	Domain            string `json:"domain" binding:"required"`
+	ContainerPort     int    `json:"container_port" binding:"required"`
+	Description       string `json:"description"`
+}
+
+type DeleteProxyRequest struct {
+	Domain string `json:"domain" binding:"required"`
+}

@@ -51,6 +51,39 @@
                     <label class="label"><span class="label-text">描述</span></label>
                     <textarea id="nodeDescription" rows="3" class="textarea textarea-bordered"></textarea>
                 </div>
+                
+                <div class="divider text-sm text-gray-600">同步配置</div>
+                
+                <div class="form-control">
+                    <label class="label"><span class="label-text">同步预设</span></label>
+                    <select id="syncPreset" onchange="handlePresetChange()" class="select select-bordered">
+                        <option value="low">低配 (批次3, 间隔10秒) - 适合低配置服务器</option>
+                        <option value="medium" selected>中配 (批次5, 间隔5秒) - 推荐配置</option>
+                        <option value="high">高配 (批次10, 间隔3秒) - 适合高配置服务器</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                    <label class="label">
+                        <span class="label-text-alt text-gray-500">控制节点同步容器时的批次大小和间隔</span>
+                    </label>
+                </div>
+                
+                <div id="customSyncSettings" class="hidden space-y-4">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">批次大小</span></label>
+                        <input type="number" id="batchSize" min="1" max="20" value="5" class="input input-bordered">
+                        <label class="label">
+                            <span class="label-text-alt text-gray-500">每批同时处理的容器数量</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">批次间隔 (秒)</span></label>
+                        <input type="number" id="batchInterval" min="1" max="30" value="5" class="input input-bordered">
+                        <label class="label">
+                            <span class="label-text-alt text-gray-500">批次之间的等待时间</span>
+                        </label>
+                    </div>
+                </div>
+                
                 <div class="modal-action">
                     <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition">取消</button>
                     <button type="submit" class="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">保存</button>
@@ -144,13 +177,16 @@
                         </div>
                         <div class="flex gap-1.5">
                             <button onclick="testNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition" title="测试连接">
-                                ⚡ 测试
+                                测试
+                            </button>
+                            <button onclick="refreshNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition" title="刷新节点信息">
+                                刷新
                             </button>
                             <button onclick="editNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition">
-                                ✏️ 编辑
+                                编辑
                             </button>
                             <button onclick="deleteNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">
-                                🗑 删除
+                                删除
                             </button>
                         </div>
                     </div>
@@ -165,10 +201,25 @@
             };
             return badges[status] || badges.inactive;
         }
+        function handlePresetChange() {
+            const preset = $('#syncPreset').val();
+            const customSettings = document.getElementById('customSyncSettings');
+            
+            if (preset === 'custom') {
+                customSettings.classList.remove('hidden');
+            } else {
+                customSettings.classList.add('hidden');
+            }
+        }
+        
         function showAddModal() {
             $('#modalTitle').text('添加节点');
             $('#nodeForm')[0].reset();
             $('#nodeId').val('');
+            $('#syncPreset').val('medium');
+            $('#batchSize').val(5);
+            $('#batchInterval').val(5);
+            handlePresetChange();
             document.getElementById('nodeModal').showModal();
         }
         function editNode(id) {
@@ -181,6 +232,10 @@
                     $('#nodeAddress').val(node.address);
                     $('#nodeApiKey').val(node.api_key);
                     $('#nodeDescription').val(node.description);
+                    $('#syncPreset').val(node.sync_preset || 'medium');
+                    $('#batchSize').val(node.batch_size || 5);
+                    $('#batchInterval').val(node.batch_interval || 5);
+                    handlePresetChange();
                     document.getElementById('nodeModal').showModal();
                 } else {
                     alert('获取节点信息失败');
@@ -193,11 +248,15 @@
         $('#nodeForm').on('submit', function(e) {
             e.preventDefault();
             const id = $('#nodeId').val();
+            const syncPreset = $('#syncPreset').val();
             const data = {
                 name: $('#nodeName').val(),
                 address: $('#nodeAddress').val(),
                 api_key: $('#nodeApiKey').val(),
-                description: $('#nodeDescription').val()
+                description: $('#nodeDescription').val(),
+                sync_preset: syncPreset,
+                batch_size: parseInt($('#batchSize').val()) || 5,
+                batch_interval: parseInt($('#batchInterval').val()) || 5
             };
             const url = id ? `/api/nodes/${id}` : '/api/nodes';
             const method = id ? 'PUT' : 'POST';
@@ -233,8 +292,24 @@
                 alert('测试失败');
             });
         }
+        function refreshNode(id) {
+            const $btn = $(`button[onclick="refreshNode(${id})"]`);
+            const originalHtml = $btn.html();
+            $btn.html('<span class="loading loading-spinner loading-xs"></span>').prop('disabled', true);
+            $.post(`/api/nodes/${id}/refresh`, function(result) {
+                $btn.html(originalHtml).prop('disabled', false);
+                if (result.code === 200) {
+                    setTimeout(() => loadNodes(), 500);
+                } else {
+                    alert(result.msg);
+                }
+            }).fail(function() {
+                $btn.html(originalHtml).prop('disabled', false);
+                alert('刷新失败');
+            });
+        }
         function deleteNode(id) {
-            if (!confirm('确定要删除此节点吗？')) return;
+            if (!confirm('⚠️ 警告：确定要删除此节点吗？\n\n删除后该节点的所有容器、NAT规则等配置信息都将丢失，且无法恢复！')) return;
             $.ajax({
                 url: `/api/nodes/${id}`,
                 method: 'DELETE',

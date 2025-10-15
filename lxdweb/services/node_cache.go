@@ -14,14 +14,13 @@ import (
 )
 
 func StartNodeCacheService() {
-	log.Println("[NODE-CACHE] ✓ 节点信息缓存服务启动")
+	log.Println("[NODE-CACHE] 节点信息缓存服务启动")
 
 	go func() {
-		time.Sleep(2 * time.Second)
 		refreshAllNodeCache()
 	}()
 
-	ticker := time.NewTicker(3 * time.Minute)
+	ticker := time.NewTicker(1 * time.Hour)
 	go func() {
 		for range ticker.C {
 			refreshAllNodeCache()
@@ -137,5 +136,15 @@ func GetNodeCache(nodeID uint) (map[string]interface{}, error) {
 	}
 	
 	return sysInfo, nil
+}
+
+func RefreshNodeCache(nodeID uint) error {
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		return err
+	}
+	
+	cacheNodeInfo(node)
+	return nil
 }
 

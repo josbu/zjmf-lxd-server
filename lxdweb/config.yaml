@@ -1,12 +1,33 @@
 server:
-  address: "0.0.0.0:3000" # 服务器地址
-  mode: "release" # 运行模式: debug | release
-  session_secret: "GgUM6g7jJuAXaL3NzBNmB2z27EITb2#CfbHy$CA9JwQWL4%sPxJD%BfE2r3UC#zn" # 会话密钥
+  # 服务器监听地址
+  address: "0.0.0.0:3000"
+  # 运行模式: debug | release
+  mode: "release"
+  # 会话密钥
+  session_secret: "test"
+  # 启用 HTTPS
+  enable_https: true
+  # 证书文件路径
+  cert_file: "cert.pem"
+  # 密钥文件路径
+  key_file: "key.pem"
 
 database:
-  path: "lxdweb.db" # 数据库文件路径
+  # 数据库文件路径
+  path: "lxdweb.db"
 
-sync:
-  interval: 3600 # 同步间隔秒
-  batch_size: 5 # 每批同步个
-  batch_interval: 5 # 批次间隔秒
+logging:
+  # 日志级别: debug | info | warn | error
+  level: "error"
+  # 日志文件保存路径
+  file: "lxdweb.log"
+  # 单个日志文件最大大小（MB）
+  max_size: 10
+  # 保留的旧日志文件数量
+  max_backups: 2
+  # 保留的旧日志文件天数
+  max_age: 30
+  # 是否压缩旧日志文件
+  compress: true
+  # 开发模式（控制台输出格式）
+  dev_mode: false

@@ -11,16 +11,97 @@
 <body class="bg-gray-50">
     {{template "header.html" .}}
     
+    <!-- 创建容器模态框 -->
+    <div id="createContainerModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50" onclick="if(event.target === this) closeCreateContainer()">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-600 to-indigo-700">
+                <h2 class="text-xl font-bold text-white">创建新容器</h2>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                <form id="createContainerForm" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">容器名称 *</label>
+                            <input type="text" name="hostname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: web01">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">节点 *</label>
+                            <select name="node_id" required id="createNodeSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">选择节点</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">密码 *</label>
+                            <input type="text" name="password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="容器root密码">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">镜像 *</label>
+                            <input type="text" name="image" required value="debian12" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: debian12">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">CPU核心数</label>
+                            <input type="number" name="cpus" value="1" min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">内存</label>
+                            <input type="text" name="memory" value="512MB" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: 512MB">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">硬盘</label>
+                            <input type="text" name="disk" value="10GB" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: 10GB">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">入站带宽</label>
+                            <input type="text" name="ingress" value="100Mbit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: 100Mbit">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">出站带宽</label>
+                            <input type="text" name="egress" value="100Mbit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="例如: 100Mbit">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">月流量限制(GB)</label>
+                            <input type="number" name="traffic_limit" value="100" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" name="allow_nesting" class="mr-2">
+                                <span class="text-sm text-gray-700">允许容器嵌套</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" name="memory_swap" checked class="mr-2">
+                                <span class="text-sm text-gray-700">启用内存交换</span>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <button onclick="closeCreateContainer()" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition">取消</button>
+                <button onclick="submitCreateContainer()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">创建容器</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 容器详情模态框 -->
     <div id="containerDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50" onclick="if(event.target === this) closeContainerDetail()">
         <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-indigo-600 to-indigo-700">
                 <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                    📊 容器详情 - <span id="detailHostname"></span>
+                    容器详情 - <span id="detailHostname"></span>
                 </h2>
                 <div class="flex items-center gap-2">
                     <button onclick="manualRefreshDetail()" class="px-3 py-1 text-sm bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded transition" title="手动刷新">
-                        🔄 刷新
+                        刷新
                     </button>
                     <button onclick="closeContainerDetail()" class="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
                 </div>
@@ -49,17 +130,23 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <button onclick="showCreateContainer()" class="btn-action bg-indigo-500 hover:bg-indigo-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    <span>创建容器</span>
+                </button>
                 <button onclick="loadContainers()" class="btn-action bg-gray-500 hover:bg-gray-600">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                     </svg>
                     <span>刷新页面</span>
                 </button>
-                <button onclick="syncAllNodes()" id="syncAllBtn" class="btn-action bg-green-500 hover:bg-green-600">
+                <button onclick="syncCurrentNode()" id="syncAllBtn" class="btn-action bg-green-500 hover:bg-green-600">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
-                    <span>同步所有节点</span>
+                    <span>同步当前节点</span>
                 </button>
                 <button onclick="showSyncHistory()" class="btn-action bg-blue-500 hover:bg-blue-600">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -364,12 +451,13 @@
                         <td style="min-width: 140px">${trafficDisplay}</td>
                         <td>
                             <div class="flex gap-1 flex-wrap">
-                                <button onclick="showContainerDetail('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded transition" title="详情">📊</button>
-                                <button onclick="startContainer('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-green-600 hover:bg-green-700 rounded transition" title="启动">▶</button>
-                                <button onclick="stopContainer('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-orange-600 hover:bg-orange-700 rounded transition" title="停止">■</button>
-                                <button onclick="restartContainer('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded transition" title="重启">⟳</button>
-                                <button onclick="openConsole('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-purple-600 hover:bg-purple-700 rounded transition" title="控制台" ${c.status !== 'Running' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>🖥</button>
-                                <button onclick="deleteContainer('${c.hostname}', ${c.node_id})" class="px-2 py-1 text-xs text-white bg-red-600 hover:bg-red-700 rounded transition" title="删除">🗑</button>
+                                <button onclick="showContainerDetail('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded transition">详情</button>
+                                <button onclick="refreshSingleContainer('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-gray-600 hover:bg-gray-700 rounded transition">刷新</button>
+                                <button onclick="startContainer('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-green-600 hover:bg-green-700 rounded transition">启动</button>
+                                <button onclick="stopContainer('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-orange-600 hover:bg-orange-700 rounded transition">停止</button>
+                                <button onclick="restartContainer('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded transition">重启</button>
+                                <button onclick="openConsole('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-purple-600 hover:bg-purple-700 rounded transition" ${c.status !== 'Running' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>控制台</button>
+                                <button onclick="deleteContainer('${c.hostname}', ${c.node_id})" class="px-3 py-1 text-xs text-white bg-red-600 hover:bg-red-700 rounded transition">删除</button>
                             </div>
                         </td>
                     </tr>
@@ -493,7 +581,7 @@
         }
         function loadContainers() {
             $('#containerTableBody').html('<tr><td colspan="9" class="text-center"><span class="loading loading-spinner loading-md"></span> 从缓存加载中...</td></tr>');
-            $.get('/api/containers', function(result) {
+            $.get('/api/containers/cache', function(result) {
                 if (result.code === 200) {
                     allContainers = result.data || [];
                     console.log('加载到的容器数据:', allContainers);
@@ -519,8 +607,21 @@
             return time.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
         
-        function syncAllNodes() {
-            if (!confirm('确定要同步所有节点的容器信息吗？\n\n此操作将并发获取所有容器的最新状态，可能需要几秒钟时间。')) {
+        function syncCurrentNode() {
+            const nodeId = $('#nodeFilter').val();
+            const nodeName = $('#nodeFilter option:selected').text();
+            
+            let confirmMsg, apiUrl;
+            
+            if (!nodeId) {
+                confirmMsg = '确定要同步所有节点的容器信息吗？\n\n此操作将并发获取所有容器的最新状态，可能需要几秒钟时间。';
+                apiUrl = '/api/sync/all';
+            } else {
+                confirmMsg = `确定要同步节点 "${nodeName}" 的容器信息吗？\n\n此操作将获取该节点所有容器的最新状态。`;
+                apiUrl = `/api/sync/node/${nodeId}`;
+            }
+            
+            if (!confirm(confirmMsg)) {
                 return;
             }
             
@@ -529,13 +630,12 @@
             $btn.html('<span class="loading loading-spinner loading-xs"></span> 同步中...').prop('disabled', true);
             
             $.ajax({
-                url: '/api/sync/all',
+                url: apiUrl,
                 type: 'POST',
                 contentType: 'application/json',
                 success: function(result) {
                     if (result.code === 200) {
                         showToast('success', result.msg || '同步任务已启动');
-                        // 3秒后开始轮询状态
                         setTimeout(() => {
                             startSyncStatusPolling();
                         }, 3000);
@@ -694,22 +794,47 @@
             }, 3000);
         }
         function startContainer(name, nodeId) {
+            if (!confirm(`确定要启动容器 ${name} 吗？`)) return;
             containerAction(name, nodeId, 'start', '启动');
         }
         function stopContainer(name, nodeId) {
+            if (!confirm(`确定要停止容器 ${name} 吗？\n\n停止后容器内运行的服务将会中断。`)) return;
             containerAction(name, nodeId, 'stop', '停止');
         }
         function restartContainer(name, nodeId) {
+            if (!confirm(`确定要重启容器 ${name} 吗？\n\n重启会导致容器短暂中断服务。`)) return;
             containerAction(name, nodeId, 'restart', '重启');
         }
         function deleteContainer(name, nodeId) {
-            if (!confirm(`确定要删除容器 ${name} 吗？`)) return;
+            if (!confirm(`⚠️ 警告：确定要删除容器 ${name} 吗？\n\n删除后容器内的所有数据将永久丢失，此操作不可恢复！`)) return;
             containerAction(name, nodeId, 'delete', '删除');
+        }
+        function refreshSingleContainer(hostname, nodeId) {
+            const $btn = $(`button[onclick="refreshSingleContainer('${hostname}', ${nodeId})"]`);
+            const originalHtml = $btn.html();
+            $btn.html('<span class="loading loading-spinner loading-xs"></span>').prop('disabled', true);
+            
+            $.ajax({
+                url: `/api/containers/${hostname}/refresh?node_id=${nodeId}`,
+                type: 'POST',
+                success: function(result) {
+                    $btn.html(originalHtml).prop('disabled', false);
+                    if (result.code === 200) {
+                        loadContainers();
+                    } else {
+                        alert('刷新失败: ' + (result.msg || '未知错误'));
+                    }
+                },
+                error: function() {
+                    $btn.html(originalHtml).prop('disabled', false);
+                    alert('刷新失败，请检查网络连接');
+                }
+            });
         }
         function openConsole(hostname, nodeId) {
             const $btn = $(`button[onclick="openConsole('${hostname}', ${nodeId})"]`);
             const originalHtml = $btn.html();
-            $btn.html('⏳').prop('disabled', true);
+            $btn.html('连接中...').prop('disabled', true);
             $.ajax({
                 url: '/api/console/token',
                 type: 'POST',
@@ -737,11 +862,21 @@
             });
         }
         function containerAction(name, nodeId, action, actionName) {
+            const $btn = $(`button[onclick="${action}Container('${name}', ${nodeId})"]`);
+            const originalHtml = $btn.html();
+            $btn.html('<span class="loading loading-spinner loading-xs"></span>').prop('disabled', true);
+            
             $.post(`/api/containers/${name}/${action}?node_id=${nodeId}`, function(result) {
-                alert(result.msg || `${actionName}任务已提交`);
-                setTimeout(loadContainers, 2000);
+                $btn.html(originalHtml).prop('disabled', false);
+                if (result.code === 200) {
+                    alert(result.msg || `${actionName}成功`);
+                    loadContainers();
+                } else {
+                    alert(`${actionName}失败: ` + (result.msg || '未知错误'));
+                }
             }).fail(function() {
-                alert(`${actionName}失败`);
+                $btn.html(originalHtml).prop('disabled', false);
+                alert(`${actionName}失败，请检查网络连接`);
             });
         }
         
@@ -800,7 +935,7 @@
                         <div class="space-y-4">
                             <!-- 基本信息 -->
                             <div class="bg-gray-50 rounded-lg p-4">
-                                <h3 class="text-sm font-semibold text-gray-700 mb-3">📋 基本信息</h3>
+                                <h3 class="text-sm font-semibold text-gray-700 mb-3">基本信息</h3>
                                 <div class="grid grid-cols-2 gap-3 text-sm">
                                     <div><span class="text-gray-600">容器名称:</span> <span class="font-medium">${data.hostname}</span></div>
                                     <div><span class="text-gray-600">状态:</span> <span class="badge ${data.status === 'Running' ? 'badge-success' : 'badge-ghost'} badge-sm">${data.status}</span></div>
@@ -813,7 +948,7 @@
                             
                             <!-- 资源配置 -->
                             <div class="bg-gray-50 rounded-lg p-4">
-                                <h3 class="text-sm font-semibold text-gray-700 mb-3">⚙️ 资源配置</h3>
+                                <h3 class="text-sm font-semibold text-gray-700 mb-3">资源配置</h3>
                                 <div class="grid grid-cols-2 gap-3 text-sm">
                                     <div><span class="text-gray-600">CPU核心:</span> <span class="font-medium">${data.cpus || data.config?.cpus || '-'} 核</span></div>
                                     <div><span class="text-gray-600">内存:</span> <span class="font-medium">${data.config?.memory || data.memory + 'MB' || '-'}</span></div>
@@ -824,7 +959,7 @@
                             
                             <!-- 实时使用情况 -->
                             <div class="bg-gray-50 rounded-lg p-4">
-                                <h3 class="text-sm font-semibold text-gray-700 mb-3">📊 实时使用情况</h3>
+                                <h3 class="text-sm font-semibold text-gray-700 mb-3">实时使用情况</h3>
                                 <div class="space-y-3">
                                     <!-- CPU -->
                                     <div>
@@ -887,7 +1022,7 @@
                             <!-- 最后更新时间 -->
                             <div class="text-xs text-gray-500 text-center">
                                 <span>最后更新: ${data.last_update || new Date().toLocaleTimeString('zh-CN')}</span>
-                                <span class="ml-2">⏱️ 每5秒自动刷新</span>
+                                <span class="ml-2">每10秒自动刷新</span>
                             </div>
                         </div>
                     `);
@@ -896,6 +1031,82 @@
                 }
             }).fail(function() {
                 $content.html(`<div class="text-center text-red-600 py-8">网络错误，请检查连接</div>`);
+            });
+        }
+
+        function showCreateContainer() {
+            $.get('/api/nodes', function(result) {
+                if (result.code === 200) {
+                    const nodes = result.data || [];
+                    const options = nodes
+                        .filter(n => n.status === 'active')
+                        .map(n => `<option value="${n.id}">${n.name}</option>`)
+                        .join('');
+                    $('#createNodeSelect').html('<option value="">选择节点</option>' + options);
+                }
+            });
+            document.getElementById('createContainerModal').classList.remove('hidden');
+            document.getElementById('createContainerForm').reset();
+        }
+
+        function closeCreateContainer() {
+            document.getElementById('createContainerModal').classList.add('hidden');
+        }
+
+        function submitCreateContainer() {
+            const form = document.getElementById('createContainerForm');
+            if (!form.checkValidity()) {
+                alert('请填写所有必填项');
+                return;
+            }
+
+            const formData = new FormData(form);
+            const data = {
+                node_id: parseInt(formData.get('node_id')),
+                hostname: formData.get('hostname'),
+                password: formData.get('password'),
+                image: formData.get('image'),
+                cpus: parseInt(formData.get('cpus')),
+                memory: formData.get('memory'),
+                disk: formData.get('disk'),
+                ingress: formData.get('ingress'),
+                egress: formData.get('egress'),
+                traffic_limit: parseInt(formData.get('traffic_limit')),
+                allow_nesting: formData.get('allow_nesting') === 'on',
+                memory_swap: formData.get('memory_swap') === 'on'
+            };
+
+            if (!data.node_id) {
+                alert('请选择节点');
+                return;
+            }
+
+            const $submitBtn = $('button[onclick="submitCreateContainer()"]');
+            const originalHtml = $submitBtn.html();
+            $submitBtn.html('<span class="loading loading-spinner loading-xs"></span> 创建中...').prop('disabled', true);
+
+            $.ajax({
+                url: '/api/containers/create',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function(result) {
+                    $submitBtn.html(originalHtml).prop('disabled', false);
+                    if (result.code === 200) {
+                        alert('容器创建成功！');
+                        closeCreateContainer();
+                        setTimeout(() => {
+                            loadContainers();
+                        }, 2000);
+                    } else {
+                        alert('创建失败: ' + (result.msg || '未知错误'));
+                    }
+                },
+                error: function(xhr) {
+                    $submitBtn.html(originalHtml).prop('disabled', false);
+                    const response = xhr.responseJSON;
+                    alert('创建失败: ' + (response?.msg || '网络错误'));
+                }
             });
         }
     </script>
