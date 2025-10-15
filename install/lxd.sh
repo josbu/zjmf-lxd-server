@@ -61,11 +61,11 @@ if [[ -f /etc/os-release ]]; then
     case $ID in
         ubuntu)
             info "检测到系统: Ubuntu $VERSION_ID"
-            RECOMMENDED_STORAGE="lvm"
+            RECOMMENDED_STORAGE="btrfs"
             ;;
         debian)
             info "检测到系统: Debian $VERSION_ID"
-            RECOMMENDED_STORAGE="lvm"
+            RECOMMENDED_STORAGE="btrfs"
             ;;
         *)
             err "不支持的系统类型: $ID，仅支持 Ubuntu 和 Debian"
@@ -151,7 +151,7 @@ echo "性能优化: 已自动关闭调试日志"
 echo
 
 info "初始化建议:"
-echo "- 系统推荐选择 lvm 存储后端"
+echo "- 系统推荐选择 btrfs 存储后端"
 echo "- 存储池大小根据实际需求设置"
 echo "- 网络配置可以使用默认设置"
 echo

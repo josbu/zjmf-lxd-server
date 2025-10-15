@@ -35,10 +35,15 @@ if [[ $DELETE == true ]]; then
   echo "警告: 此操作将删除所有数据，包括数据库文件和备份！"
   
   if [[ -d "$DIR/backups" ]]; then
-    backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
-    if [[ $backup_count -gt 0 ]]; then
-      echo "发现 $backup_count 个SQLite压缩备份文件将被删除"
+    db_backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
+    nat_v4_count=$(ls "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | wc -l)
+    nat_v6_count=$(ls "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | wc -l)
+    
+    if [[ $db_backup_count -gt 0 ]] || [[ $nat_v4_count -gt 0 ]] || [[ $nat_v6_count -gt 0 ]]; then
       echo "备份文件位置: $DIR/backups/"
+      [[ $db_backup_count -gt 0 ]] && echo "  - SQLite数据库备份: $db_backup_count 个"
+      [[ $nat_v4_count -gt 0 ]] && echo "  - NAT规则备份(IPv4): $nat_v4_count 个"
+      [[ $nat_v6_count -gt 0 ]] && echo "  - NAT规则备份(IPv6): $nat_v6_count 个"
     fi
   fi
   
@@ -100,34 +105,120 @@ apt install -y curl wget unzip zip openssl xxd systemd iptables-persistent || er
 
 systemctl stop $NAME 2>/dev/null || true
 
+backup_nat_rules() {
+  local backup_dir="$DIR/backups"
+  local timestamp=$(date +"%Y%m%d_%H%M%S")
+  
+  mkdir -p "$backup_dir" || {
+    warn "创建备份目录失败: $backup_dir"
+    return 1
+  }
+  
+  local has_backup=false
+  
+  if [[ -f "/etc/iptables/rules.v4" ]]; then
+    cp "/etc/iptables/rules.v4" "$backup_dir/iptables_rules_v4_${timestamp}" 2>/dev/null && has_backup=true
+  fi
+  
+  if [[ -f "/etc/iptables/rules.v6" ]]; then
+    cp "/etc/iptables/rules.v6" "$backup_dir/iptables_rules_v6_${timestamp}" 2>/dev/null && has_backup=true
+  fi
+  
+  if [[ $has_backup == true ]]; then
+    ok "NAT规则已备份 (iptables持久化文件)"
+    
+    local old_v4_backups=($(ls -t "$backup_dir"/iptables_rules_v4_* 2>/dev/null))
+    if [[ ${#old_v4_backups[@]} -gt 2 ]]; then
+      for ((i=2; i<${#old_v4_backups[@]}; i++)); do
+        rm -f "${old_v4_backups[$i]}" 2>/dev/null
+      done
+    fi
+    
+    local old_v6_backups=($(ls -t "$backup_dir"/iptables_rules_v6_* 2>/dev/null))
+    if [[ ${#old_v6_backups[@]} -gt 2 ]]; then
+      for ((i=2; i<${#old_v6_backups[@]}; i++)); do
+        rm -f "${old_v6_backups[$i]}" 2>/dev/null
+      done
+    fi
+    
+    return 0
+  else
+    info "未找到 iptables 持久化文件，跳过 NAT 规则备份"
+    return 1
+  fi
+}
+
 backup_database() {
   local backup_dir="$DIR/backups"
   local timestamp=$(date +"%Y%m%d_%H%M%S")
   local backup_name="lxdapi_backup_${timestamp}"
   
-  if [[ -f "$DIR/$DB_FILE" ]]; then
-    mkdir -p "$backup_dir"
-    
-    local temp_backup_dir=$(mktemp -d)
-    
-    cp "$DIR/$DB_FILE" "$temp_backup_dir/"
-    [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$temp_backup_dir/"
-    [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$temp_backup_dir/"
-    
-    cd "$temp_backup_dir" && zip -q "${backup_name}.zip" * && mv "${backup_name}.zip" "$backup_dir/"
-    rm -rf "$temp_backup_dir"
-    
-    if [[ -f "$backup_dir/${backup_name}.zip" ]]; then
-      ok "SQLite数据库已备份: ${backup_name}.zip"
-      
-      cd "$backup_dir" && ls -t lxdapi_backup_*.zip 2>/dev/null | tail -n +3 | while read old_backup; do
-        rm -f "$old_backup" 2>/dev/null
-        info "清理旧备份: $old_backup"
-      done
-      
-      return 0
-    fi
+  if [[ ! -f "$DIR/$DB_FILE" ]]; then
+    info "SQLite数据库文件不存在，跳过数据库备份"
+    return 1
   fi
+  
+  if ! command -v zip &> /dev/null; then
+    warn "zip 命令未安装，跳过数据库备份"
+    return 1
+  fi
+  
+  mkdir -p "$backup_dir" || {
+    warn "创建备份目录失败: $backup_dir"
+    return 1
+  }
+  
+  local temp_backup_dir=$(mktemp -d)
+  
+  if ! cp "$DIR/$DB_FILE" "$temp_backup_dir/"; then
+    warn "复制数据库文件失败"
+    rm -rf "$temp_backup_dir"
+    return 1
+  fi
+  
+  [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$temp_backup_dir/" 2>/dev/null
+  [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$temp_backup_dir/" 2>/dev/null
+  
+  local current_dir=$(pwd)
+  cd "$temp_backup_dir" || {
+    warn "切换到临时目录失败"
+    rm -rf "$temp_backup_dir"
+    return 1
+  }
+  
+  if ! zip -q "${backup_name}.zip" * 2>/dev/null; then
+    warn "压缩数据库文件失败"
+    cd "$current_dir"
+    rm -rf "$temp_backup_dir"
+    return 1
+  fi
+  
+  if ! mv "${backup_name}.zip" "$backup_dir/"; then
+    warn "移动备份文件失败"
+    cd "$current_dir"
+    rm -rf "$temp_backup_dir"
+    return 1
+  fi
+  
+  cd "$current_dir"
+  rm -rf "$temp_backup_dir"
+  
+  if [[ -f "$backup_dir/${backup_name}.zip" ]]; then
+    local backup_size=$(du -h "$backup_dir/${backup_name}.zip" 2>/dev/null | cut -f1)
+    ok "SQLite数据库已备份: ${backup_name}.zip (大小: $backup_size)"
+    
+    local old_backups=($(ls -t "$backup_dir"/lxdapi_backup_*.zip 2>/dev/null))
+    if [[ ${#old_backups[@]} -gt 2 ]]; then
+      for ((i=2; i<${#old_backups[@]}; i++)); do
+        rm -f "${old_backups[$i]}" 2>/dev/null
+        info "清理旧数据库备份: $(basename "${old_backups[$i]}")"
+      done
+    fi
+    
+    return 0
+  fi
+  
+  warn "备份文件未找到，数据库备份可能失败"
   return 1
 }
 
@@ -147,9 +238,13 @@ check_db_backup_warning() {
   fi
 }
 
+mkdir -p "$DIR/backups"
+
 TMP_DB=$(mktemp -d)
 if [[ $UPGRADE == true ]]; then
   check_db_backup_warning
+  
+  backup_nat_rules
   backup_database
   
   if [[ -f "$DIR/$DB_FILE" ]]; then
@@ -158,13 +253,18 @@ if [[ $UPGRADE == true ]]; then
     [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$TMP_DB/"
   fi
   
-  find "$DIR" -maxdepth 1 -type f -delete
-  find "$DIR" -maxdepth 1 -type d ! -name "backups" -exec rm -rf {} + 2>/dev/null || true
+  info "清理旧文件（保留 backups 目录和备份文件）"
+  find "$DIR" -maxdepth 1 -type f ! -name "lxdapi_backup_*.zip" ! -name "iptables_rules_*" -delete 2>/dev/null || true
+  for subdir in "$DIR"/*; do
+    if [[ -d "$subdir" ]] && [[ "$(basename "$subdir")" != "backups" ]]; then
+      rm -rf "$subdir" 2>/dev/null || true
+    fi
+  done
 elif [[ -d "$DIR" ]]; then
+  backup_nat_rules
   backup_database
 fi
 mkdir -p "$DIR"
-mkdir -p "$DIR/backups"
 
 TMP=$(mktemp -d)
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
@@ -228,7 +328,7 @@ echo "    LXD API 服务配置向导 - $VERSION"
 echo "========================================"
 echo
 
-echo "==== 步骤 1/4: 基础信息配置 ===="
+echo "==== 步骤 1/6: 基础信息配置 ===="
 echo
 
 read -p "服务器外网 IP [$DEFAULT_IP]: " EXTERNAL_IP
@@ -243,7 +343,7 @@ SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
 ok "基础信息配置完成"
 echo
 
-echo "==== 步骤 2/4: 存储池配置 ===="
+echo "==== 步骤 2/6: 存储池配置 ===="
 echo
 
 DETECTED_POOLS_LIST=$(lxc storage list --format csv 2>/dev/null | cut -d, -f1 | grep -v "^NAME$" | head -10)
@@ -305,7 +405,7 @@ case $STORAGE_MODE in
 esac
 echo
 
-echo "==== 步骤 3/4: 数据库与队列后端组合 ===="
+echo "==== 步骤 3/6: 数据库与队列后端组合 ===="
 echo
 echo "请选择数据库与任务队列后端组合："
 echo "1. SQLite + Database 队列 (默认，轻量级，无需额外配置)"
@@ -489,7 +589,100 @@ esac
 ok "数据库与队列配置完成"
 echo
 
-echo "==== 步骤 4/4: 网络管理方案 ===="
+echo "==== 步骤 4/5: 流量监控性能配置 ===="
+echo
+echo "请选择流量监控性能方案："
+echo "1. 高性能模式 (适用独立服务器 8核+)         - CPU占用 10-15%, 封禁响应 ~10秒"
+echo "2. 标准模式 (适用独立服务器 4-8核, 推荐)    - CPU占用 5-10%, 封禁响应 ~15秒"
+echo "3. 轻量模式 (适用独立服务器 2-4核)          - CPU占用 2-5%, 封禁响应 ~30秒"
+echo "4. 最小模式 (适用无独享内核或共享VPS)       - CPU占用 0.5-2%, 封禁响应 ~60秒"
+echo "5. 自定义模式 (手动配置所有参数)"
+echo
+read -p "请选择 [1-5, 默认2]: " TRAFFIC_MODE
+TRAFFIC_MODE=${TRAFFIC_MODE:-2}
+
+while [[ ! $TRAFFIC_MODE =~ ^[1-5]$ ]]; do
+  warn "无效选择，请输入 1-5"
+  read -p "请选择 [1-5, 默认2]: " TRAFFIC_MODE
+  TRAFFIC_MODE=${TRAFFIC_MODE:-2}
+done
+
+case $TRAFFIC_MODE in
+  1)
+    # 高性能模式
+    TRAFFIC_INTERVAL=5
+    TRAFFIC_BATCH_SIZE=20
+    TRAFFIC_LIMIT_CHECK_INTERVAL=10
+    TRAFFIC_LIMIT_CHECK_BATCH_SIZE=20
+    TRAFFIC_AUTO_RESET_INTERVAL=600
+    TRAFFIC_AUTO_RESET_BATCH_SIZE=20
+    ok "已选择: 高性能模式"
+    ;;
+  2)
+    # 标准模式
+    TRAFFIC_INTERVAL=10
+    TRAFFIC_BATCH_SIZE=10
+    TRAFFIC_LIMIT_CHECK_INTERVAL=15
+    TRAFFIC_LIMIT_CHECK_BATCH_SIZE=10
+    TRAFFIC_AUTO_RESET_INTERVAL=900
+    TRAFFIC_AUTO_RESET_BATCH_SIZE=10
+    ok "已选择: 标准模式 (推荐)"
+    ;;
+  3)
+    # 轻量模式
+    TRAFFIC_INTERVAL=15
+    TRAFFIC_BATCH_SIZE=5
+    TRAFFIC_LIMIT_CHECK_INTERVAL=30
+    TRAFFIC_LIMIT_CHECK_BATCH_SIZE=5
+    TRAFFIC_AUTO_RESET_INTERVAL=1800
+    TRAFFIC_AUTO_RESET_BATCH_SIZE=5
+    ok "已选择: 轻量模式"
+    ;;
+  4)
+    # 最小模式
+    TRAFFIC_INTERVAL=30
+    TRAFFIC_BATCH_SIZE=3
+    TRAFFIC_LIMIT_CHECK_INTERVAL=60
+    TRAFFIC_LIMIT_CHECK_BATCH_SIZE=3
+    TRAFFIC_AUTO_RESET_INTERVAL=3600
+    TRAFFIC_AUTO_RESET_BATCH_SIZE=3
+    ok "已选择: 最小模式"
+    ;;
+  5)
+    # 自定义模式
+    ok "已选择: 自定义模式"
+    echo
+    echo "==== 流量统计配置 ===="
+    read -p "流量统计间隔（秒，建议5-30）[10]: " TRAFFIC_INTERVAL
+    TRAFFIC_INTERVAL=${TRAFFIC_INTERVAL:-10}
+    
+    read -p "流量统计批量（建议3-20）[10]: " TRAFFIC_BATCH_SIZE
+    TRAFFIC_BATCH_SIZE=${TRAFFIC_BATCH_SIZE:-10}
+    
+    echo
+    echo "==== 流量限制检测配置 ===="
+    read -p "限制检测间隔（秒，建议10-60）[15]: " TRAFFIC_LIMIT_CHECK_INTERVAL
+    TRAFFIC_LIMIT_CHECK_INTERVAL=${TRAFFIC_LIMIT_CHECK_INTERVAL:-15}
+    
+    read -p "限制检测批量（建议3-20）[10]: " TRAFFIC_LIMIT_CHECK_BATCH_SIZE
+    TRAFFIC_LIMIT_CHECK_BATCH_SIZE=${TRAFFIC_LIMIT_CHECK_BATCH_SIZE:-10}
+    
+    echo
+    echo "==== 自动重置检查配置 ===="
+    read -p "自动重置检查间隔（秒，建议600-3600）[900]: " TRAFFIC_AUTO_RESET_INTERVAL
+    TRAFFIC_AUTO_RESET_INTERVAL=${TRAFFIC_AUTO_RESET_INTERVAL:-900}
+    
+    read -p "自动重置检查批量（建议3-20）[10]: " TRAFFIC_AUTO_RESET_BATCH_SIZE
+    TRAFFIC_AUTO_RESET_BATCH_SIZE=${TRAFFIC_AUTO_RESET_BATCH_SIZE:-10}
+    
+    ok "自定义配置完成"
+    ;;
+esac
+
+ok "流量监控性能配置完成"
+echo
+
+echo "==== 步骤 5/5: 网络管理方案 ===="
 echo
 echo "请选择网络模式："
 echo "1. IPv4 NAT (基础模式)"
@@ -577,7 +770,7 @@ fi
 ok "网络配置完成"
 echo
 
-echo "==== 步骤 5/5: Nginx 反向代理配置 ===="
+echo "==== 步骤 6/6: Nginx 反向代理配置 ===="
 echo
 echo "是否启用 Nginx 反向代理功能？"
 echo "此功能允许为容器配置域名反向代理（需要已安装 Nginx）"
@@ -596,6 +789,25 @@ if [[ $ENABLE_NGINX_PROXY == "y" || $ENABLE_NGINX_PROXY == "Y" ]]; then
     ok "Nginx 安装完成"
   else
     ok "检测到 Nginx 已安装"
+  fi
+  
+  # 配置 Nginx 日志轮转（保留3天）
+  if [[ -d "/etc/logrotate.d" ]]; then
+    cat > /etc/logrotate.d/nginx-lxdapi <<'EOF'
+/var/log/nginx/*-access.log /var/log/nginx/*-error.log {
+    daily
+    rotate 3
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        [ -f /var/run/nginx.pid ] && kill -USR1 `cat /var/run/nginx.pid`
+    endscript
+}
+EOF
+    ok "Nginx 日志轮转配置已创建（保留3天）"
   fi
   
   ok "Nginx 反向代理功能已启用"
@@ -689,6 +901,13 @@ replace_config_var "IPV6_BINDING_ENABLED" "$IPV6_BINDING_ENABLED"
 replace_config_var "IPV6_BINDING_INTERFACE" "$IPV6_BINDING_INTERFACE"
 replace_config_var "IPV6_POOL_START" "$IPV6_POOL_START"
 
+replace_config_var "TRAFFIC_INTERVAL" "$TRAFFIC_INTERVAL"
+replace_config_var "TRAFFIC_BATCH_SIZE" "$TRAFFIC_BATCH_SIZE"
+replace_config_var "TRAFFIC_LIMIT_CHECK_INTERVAL" "$TRAFFIC_LIMIT_CHECK_INTERVAL"
+replace_config_var "TRAFFIC_LIMIT_CHECK_BATCH_SIZE" "$TRAFFIC_LIMIT_CHECK_BATCH_SIZE"
+replace_config_var "TRAFFIC_AUTO_RESET_INTERVAL" "$TRAFFIC_AUTO_RESET_INTERVAL"
+replace_config_var "TRAFFIC_AUTO_RESET_BATCH_SIZE" "$TRAFFIC_AUTO_RESET_BATCH_SIZE"
+
 replace_config_var "NGINX_PROXY_ENABLED" "$NGINX_PROXY_ENABLED"
 
 ok "配置文件已生成"
@@ -759,6 +978,15 @@ case $NETWORK_MODE in
   5) echo "  纯 IPv6 模式";;
 esac
 echo
+echo "流量监控性能:"
+case $TRAFFIC_MODE in
+  1) echo "  模式: 高性能模式 (统计间隔: ${TRAFFIC_INTERVAL}秒, 检测间隔: ${TRAFFIC_LIMIT_CHECK_INTERVAL}秒)";;
+  2) echo "  模式: 标准模式 (统计间隔: ${TRAFFIC_INTERVAL}秒, 检测间隔: ${TRAFFIC_LIMIT_CHECK_INTERVAL}秒)";;
+  3) echo "  模式: 轻量模式 (统计间隔: ${TRAFFIC_INTERVAL}秒, 检测间隔: ${TRAFFIC_LIMIT_CHECK_INTERVAL}秒)";;
+  4) echo "  模式: 最小模式 (统计间隔: ${TRAFFIC_INTERVAL}秒, 检测间隔: ${TRAFFIC_LIMIT_CHECK_INTERVAL}秒)";;
+  5) echo "  模式: 自定义模式 (统计间隔: ${TRAFFIC_INTERVAL}秒, 检测间隔: ${TRAFFIC_LIMIT_CHECK_INTERVAL}秒)";;
+esac
+echo
 echo "反向代理:"
 if [[ $NGINX_PROXY_ENABLED == "true" ]]; then
   echo "  状态: 已启用 (Nginx 已安装并启动)"
@@ -768,11 +996,31 @@ fi
 echo
 
 if [[ -d "$DIR/backups" ]]; then
-  backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
-  if [[ $backup_count -gt 0 ]]; then
-    latest_backup=$(ls -t "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | head -1)
-    backup_size=$(du -h "$latest_backup" 2>/dev/null | cut -f1)
-    echo "SQLite 备份: $backup_count 个压缩备份 (最新: $(basename "$latest_backup"), 大小: $backup_size)"
+  db_backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
+  nat_v4_count=$(ls "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | wc -l)
+  nat_v6_count=$(ls "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | wc -l)
+  
+  if [[ $db_backup_count -gt 0 ]] || [[ $nat_v4_count -gt 0 ]] || [[ $nat_v6_count -gt 0 ]]; then
+    echo "备份信息:"
+    
+    if [[ $db_backup_count -gt 0 ]]; then
+      latest_db_backup=$(ls -t "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | head -1)
+      db_backup_size=$(du -h "$latest_db_backup" 2>/dev/null | cut -f1)
+      echo "  SQLite数据库: $db_backup_count 个 (最新: $(basename "$latest_db_backup"), 大小: $db_backup_size)"
+    fi
+    
+    if [[ $nat_v4_count -gt 0 ]]; then
+      latest_nat_v4=$(ls -t "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | head -1)
+      nat_v4_size=$(du -h "$latest_nat_v4" 2>/dev/null | cut -f1)
+      echo "  NAT规则(IPv4): $nat_v4_count 个 (最新: $(basename "$latest_nat_v4"), 大小: $nat_v4_size)"
+    fi
+    
+    if [[ $nat_v6_count -gt 0 ]]; then
+      latest_nat_v6=$(ls -t "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | head -1)
+      nat_v6_size=$(du -h "$latest_nat_v6" 2>/dev/null | cut -f1)
+      echo "  NAT规则(IPv6): $nat_v6_count 个 (最新: $(basename "$latest_nat_v6"), 大小: $nat_v6_size)"
+    fi
+    
     echo
   fi
 fi
