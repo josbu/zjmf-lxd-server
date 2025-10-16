@@ -53,89 +53,99 @@ if [[ $DELETE == true ]]; then
   exit 0
 fi
 
-info "开始安装 $NAME"
-
 info "检测系统环境..."
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
     case $ID in
         ubuntu)
-            info "检测到系统: Ubuntu $VERSION_ID"
-            RECOMMENDED_STORAGE="btrfs"
+            info "系统: Ubuntu $VERSION_ID"
             ;;
         debian)
-            info "检测到系统: Debian $VERSION_ID"
-            RECOMMENDED_STORAGE="btrfs"
+            info "系统: Debian $VERSION_ID"
             ;;
         *)
-            err "不支持的系统类型: $ID，仅支持 Ubuntu 和 Debian"
+            err "不支持的系统: $ID (仅支持 Ubuntu/Debian)"
             ;;
     esac
 else
-    err "无法检测系统类型，仅支持 Ubuntu 和 Debian 系统"
+    err "无法检测系统类型 (仅支持 Ubuntu/Debian)"
 fi
 
 arch=$(uname -m)
 case $arch in
     x86_64)
-        info "检测到架构: x86_64 (amd64)"
+        info "架构: amd64"
         ;;
     aarch64|arm64)
-        info "检测到架构: aarch64 (arm64)"
+        info "架构: arm64"
         ;;
     *)
-        err "不支持的CPU架构: $arch，仅支持 amd64 和 arm64"
+        err "不支持的架构: $arch (仅支持 amd64/arm64)"
         ;;
 esac
 
-if command -v snap &> /dev/null && snap list lxd &> /dev/null && [[ $FORCE != true ]]; then
-    warn "LXD 已安装，使用 -f 参数强制重新安装"
-    lxd --version 2>/dev/null || echo "版本信息获取失败"
+if [[ $FORCE != true ]] && [[ -f /snap/bin/lxd || -f /snap/bin/lxc ]]; then
+    ok "LXD 已安装"
+    if [[ -f /snap/bin/lxd ]]; then
+        echo "  LXD 版本: $(/snap/bin/lxd --version 2>/dev/null || echo '未知')"
+    fi
+    if [[ -f /snap/bin/lxc ]]; then
+        echo "  LXC 版本: $(/snap/bin/lxc --version 2>/dev/null || echo '未知')"
+    fi
+    warn "使用 -f 参数可强制重新安装"
     exit 0
 fi
+
+info "开始安装 LXD"
+
+info "清理旧的 snapd 环境..."
+systemctl stop snapd 2>/dev/null || true
+systemctl stop snapd.socket 2>/dev/null || true
+
+info "卸载所有 snap 包..."
+snap list 2>/dev/null | tail -n +2 | awk '{print $1}' | xargs -r -n1 snap remove 2>/dev/null || true
+
+info "卸载 snapd..."
+apt purge -y snapd 2>/dev/null || true
+apt autoremove -y 2>/dev/null || true
+
+info "清理 snapd 残留文件..."
+rm -rf /snap 2>/dev/null || true
+rm -rf /var/snap 2>/dev/null || true
+rm -rf /var/lib/snapd 2>/dev/null || true
+rm -rf /var/cache/snapd 2>/dev/null || true
 
 info "更新软件包列表..."
 apt update -y || err "软件包更新失败"
 
-if ! command -v snap &> /dev/null; then
-    info "安装 snapd..."
-    apt install -y snapd || err "snapd 安装失败"
-    
-    info "启用 snapd 服务..."
-    systemctl enable --now snapd || err "snapd 服务启用失败"
-    
-    info "等待 snapd 服务就绪..."
-    sleep 5
-else
-    info "snapd 已安装，检查服务状态..."
-    systemctl is-active --quiet snapd || {
-        info "启动 snapd 服务..."
-        systemctl start snapd || err "snapd 服务启动失败"
-        sleep 3
-    }
+info "安装 snapd..."
+apt install -y snapd || err "snapd 安装失败"
+
+info "启用 snapd 服务..."
+systemctl enable --now snapd || err "snapd 服务启用失败"
+
+info "更新环境变量..."
+export PATH="/snap/bin:$PATH"
+
+info "等待 snapd 服务就绪..."
+sleep 5
+
+info "安装 LXD (Snap)..."
+snap install lxd --channel=latest/stable || err "LXD 安装失败"
+
+info "验证 LXD 安装..."
+if [[ ! -f /snap/bin/lxd ]]; then
+    err "lxd 命令不可用，安装失败"
 fi
 
-info "安装 LXD..."
-if [[ $FORCE == true ]]; then
-    snap install lxd --channel=latest/stable --force-dangerous 2>/dev/null || snap install lxd --channel=latest/stable || {
-        warn "snap安装失败，尝试使用apt安装..."
-        apt install -y lxd || err "LXD 安装失败"
-    }
-else
-    if ! snap install lxd --channel=latest/stable 2>/dev/null; then
-        warn "snap安装失败，尝试使用apt安装..."
-        apt install -y lxd || err "LXD 安装失败"
-    fi
+if [[ ! -f /snap/bin/lxc ]]; then
+    err "lxc 命令不可用，安装失败"
 fi
 
-if ! command -v lxd &> /dev/null; then
-    err "LXD 安装失败: 命令不可用"
-fi
+info "配置性能优化..."
+snap set lxd daemon.debug=false 2>/dev/null || warn "性能优化配置失败"
 
-info "执行性能优化配置..."
-snap set lxd daemon.debug=false 2>/dev/null || warn "性能优化配置失败，可能需要手动设置"
-
-info "重启 LXD 服务以应用优化配置..."
+info "重启 LXD 服务..."
 snap restart lxd 2>/dev/null || warn "LXD 服务重启失败"
 
 info "等待 LXD 服务就绪..."
@@ -143,21 +153,17 @@ sleep 3
 
 echo
 ok "LXD 安装完成！"
-echo "LXD 版本: $(lxd --version 2>/dev/null || echo '版本获取失败')"
-echo "推荐存储后端: $RECOMMENDED_STORAGE"
-echo "系统类型: $ID $VERSION_ID"
-echo "CPU架构: $arch"
-echo "性能优化: 已自动关闭调试日志"
+echo "  LXD 版本: $(/snap/bin/lxd --version 2>/dev/null || echo '未知')"
+echo "  LXC 版本: $(/snap/bin/lxc --version 2>/dev/null || echo '未知')"
+echo "  性能优化: 已关闭调试日志"
 echo
 
-info "初始化建议:"
-echo "- 系统推荐选择 btrfs 存储后端"
-echo "- 存储池大小根据实际需求设置"
-echo "- 网络配置可以使用默认设置"
+warn "请手动初始化 LXD："
+echo -e "${YELLOW}/snap/bin/lxd init${NC}"
+echo
+echo "初始化建议："
+echo "  - 存储后端推荐: btrfs"
+echo "  - 网络配置可使用默认值"
 echo
 
-warn "需要手动初始化 LXD，请运行以下命令："
-echo -e "${YELLOW}lxd init${NC}"
-echo
-
-ok "安装完成！请按照提示进行初始化，详细教程：https://github.com/xkatld/zjmf-lxd-server/wiki"
+ok "详细教程: https://github.com/xkatld/zjmf-lxd-server/wiki"
