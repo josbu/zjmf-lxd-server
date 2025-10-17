@@ -101,7 +101,21 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
 fi
 
 apt update -y
-apt install -y curl wget unzip zip openssl xxd systemd iptables-persistent || err "依赖安装失败"
+apt install -y curl wget unzip zip openssl xxd systemd iptables-persistent lxcfs || err "依赖安装失败"
+
+# 启用并启动 LXCFS 服务
+if command -v lxcfs &> /dev/null; then
+  systemctl enable lxcfs 2>/dev/null || true
+  systemctl start lxcfs 2>/dev/null || true
+  
+  if systemctl is-active --quiet lxcfs; then
+    ok "LXCFS 服务已安装并运行"
+  else
+    warn "LXCFS 已安装但服务未运行，容器资源视图功能可能不可用"
+  fi
+else
+  warn "LXCFS 安装失败，容器资源视图功能将不可用"
+fi
 
 systemctl stop $NAME 2>/dev/null || true
 
@@ -985,6 +999,21 @@ if [[ $NGINX_PROXY_ENABLED == "true" ]]; then
   echo "  状态: 已启用 (Nginx 已安装并启动)"
 else
   echo "  状态: 未启用"
+fi
+echo
+echo "LXCFS 资源视图:"
+if command -v lxcfs &> /dev/null; then
+  if systemctl is-active --quiet lxcfs; then
+    echo "  状态: 已安装并运行"
+    echo "  挂载: /var/lib/lxcfs"
+    echo "  功能: 容器内将显示真实的资源限制"
+  else
+    echo "  状态: 已安装但未运行"
+    echo "  提示: 运行 'systemctl start lxcfs' 启动服务"
+  fi
+else
+  echo "  状态: 未安装"
+  echo "  提示: 安装后容器可显示真实资源限制"
 fi
 echo
 
