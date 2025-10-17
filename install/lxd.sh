@@ -130,6 +130,10 @@ export PATH="/snap/bin:$PATH"
 info "等待 snapd 服务就绪..."
 sleep 5
 
+info "创建必要的系统目录..."
+mkdir -p /usr/src 2>/dev/null || true
+mkdir -p /lib/modules 2>/dev/null || true
+
 info "安装 LXD (Snap)..."
 snap install lxd --channel=latest/stable || err "LXD 安装失败"
 
