@@ -67,11 +67,6 @@ func getDockerInstallCommands(distro string, version string) []string {
 			"dnf install -y docker docker-compose",
 		}
 	case "oracle":
-		if version == "7" {
-			return []string{
-				"yum install -y docker",
-			}
-		}
 		return []string{
 			"yum install -y docker-engine docker-compose",
 		}
@@ -86,11 +81,6 @@ func getDockerInstallCommands(distro string, version string) []string {
 			"zypper install -y docker docker-compose",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y docker",
-			}
-		}
 		return []string{
 			"dnf install -y docker",
 		}

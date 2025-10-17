@@ -53,8 +53,8 @@ func main() {
 	
 	arch := getSystemArch()
 	
-	if distro == "amazonlinux" && version == "2023" && arch == "arm64" {
-		log.Fatal("错误: Amazon Linux 2023 不支持 arm64 架构，请使用 amd64 系统或选择 Amazon Linux 2")
+	if distro == "amazonlinux" && arch == "arm64" {
+		log.Fatal("错误: Amazon Linux 2023 不支持 arm64 架构，请使用 amd64 系统")
 	}
 
 	var toolsList []string
@@ -793,7 +793,7 @@ func showHelp() {
 		if versions, ok := tools.SupportedDistros[distro]; ok {
 			versionStr := strings.Join(versions, ", ")
 			if distro == "amazonlinux" {
-				versionStr += " (2023仅amd64)"
+				versionStr += " (仅amd64)"
 			}
 			fmt.Printf("  %-15s %s\n", distro+":", versionStr)
 		}

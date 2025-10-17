@@ -81,11 +81,6 @@ func getPhpInstallCommands(distro string, version string) []string {
 			"zypper install -y php php-fpm php-cli php-mbstring php-curl php-zip php-mysql php-pgsql",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y php php-fpm php-cli php-common php-mbstring php-xml php-curl php-zip php-mysqlnd php-pgsql",
-			}
-		}
 		return []string{
 			"dnf install -y php php-fpm php-cli php-common php-mbstring php-xml php-curl php-zip php-mysqlnd php-pgsql",
 		}

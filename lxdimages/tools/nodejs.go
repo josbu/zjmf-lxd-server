@@ -83,11 +83,6 @@ func getNodejsInstallCommands(distro string, version string) []string {
 			"zypper install -y nodejs npm",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y nodejs npm",
-			}
-		}
 		return []string{
 			"dnf install -y nodejs npm",
 		}

@@ -81,11 +81,6 @@ func getRedisInstallCommands(distro string, version string) []string {
 			"zypper install -y redis",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y redis6",
-			}
-		}
 		return []string{
 			"dnf install -y redis6",
 		}

@@ -81,11 +81,6 @@ func getApacheInstallCommands(distro string, version string) []string {
 			"zypper install -y apache2",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y httpd",
-			}
-		}
 		return []string{
 			"dnf install -y httpd",
 		}

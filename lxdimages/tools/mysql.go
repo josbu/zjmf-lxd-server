@@ -81,11 +81,6 @@ func getMysqlInstallCommands(distro string, version string) []string {
 			"zypper install -y mysql mysql-server",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y mariadb-server",
-			}
-		}
 		return []string{
 			"dnf install -y mariadb105-server mariadb105",
 		}

@@ -81,11 +81,6 @@ func getPostgresqlInstallCommands(distro string, version string) []string {
 			"zypper install -y postgresql-server postgresql-contrib",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y postgresql15-server postgresql15-contrib",
-			}
-		}
 		return []string{
 			"dnf install -y postgresql15-server postgresql15-contrib",
 		}

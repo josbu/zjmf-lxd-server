@@ -71,11 +71,6 @@ func getGolangInstallCommands(distro string, version string) []string {
 			"zypper install -y go",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y golang",
-			}
-		}
 		return []string{
 			"dnf install -y golang",
 		}

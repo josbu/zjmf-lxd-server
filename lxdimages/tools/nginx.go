@@ -81,11 +81,6 @@ func getNginxInstallCommands(distro string, version string) []string {
 			"zypper install -y nginx",
 		}
 	case "amazonlinux":
-		if UseYum(distro, version) {
-			return []string{
-				"yum install -y nginx",
-			}
-		}
 		return []string{
 			"dnf install -y nginx",
 		}

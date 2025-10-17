@@ -71,11 +71,6 @@ func getPythonInstallCommands(distro string, version string) []string {
 			"zypper install -y python3 python3-pip python3-devel",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y python3 python3-pip python3-devel",
-			}
-		}
 		return []string{
 			"dnf install -y python3 python3-pip python3-devel",
 		}

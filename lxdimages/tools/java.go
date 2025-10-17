@@ -71,11 +71,6 @@ func getJavaInstallCommands(distro string, version string) []string {
 			"zypper install -y java-openjdk java-openjdk-devel",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y java-21-amazon-corretto java-21-amazon-corretto-devel",
-			}
-		}
 		return []string{
 			"dnf install -y java-21-amazon-corretto java-21-amazon-corretto-devel",
 		}

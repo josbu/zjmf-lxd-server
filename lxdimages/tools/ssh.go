@@ -26,10 +26,10 @@ var SupportedDistros = map[string][]string{
 	"fedora":      {"41", "42"},
 	"almalinux":   {"8", "9", "10"},
 	"rockylinux":  {"8", "9", "10"},
-	"oracle":      {"7", "8", "9"},
+	"oracle":      {"8", "9"},
 	"opensuse":    {"15.5", "15.6", "tumbleweed"},
 	"alpine":      {"3.19", "3.20", "3.21", "3.22", "edge"},
-	"amazonlinux": {"2", "2023"},
+	"amazonlinux": {"2023"},
 }
 
 func ValidateDistroVersion(distro, version string) error {
@@ -120,15 +120,9 @@ func GetSSHConfig(distro string, version string) SSHConfig {
 			"dnf install -y openssh-server sudo ca-certificates",
 		}
 	case "oracle":
-		if version == "7" {
-			config.InstallCommands = []string{
-				"yum install -y openssh-server sudo ca-certificates",
-			}
-		} else {
-			config.InstallCommands = []string{
-				"yum install -y oracle-epel-release-el8 || yum install -y oracle-epel-release-el9 || true",
-				"yum install -y openssh-server sudo ca-certificates",
-			}
+		config.InstallCommands = []string{
+			"yum install -y oracle-epel-release-el8 || yum install -y oracle-epel-release-el9 || true",
+			"yum install -y openssh-server sudo ca-certificates",
 		}
 	case "alpine":
 		config.InstallCommands = []string{
@@ -141,14 +135,8 @@ func GetSSHConfig(distro string, version string) SSHConfig {
 			"zypper install -y openssh-server sudo ca-certificates",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			config.InstallCommands = []string{
-				"yum install -y openssh-server sudo ca-certificates shadow-utils",
-			}
-		} else {
-			config.InstallCommands = []string{
-				"dnf install -y openssh-server sudo ca-certificates shadow-utils",
-			}
+		config.InstallCommands = []string{
+			"dnf install -y openssh-server sudo ca-certificates shadow-utils",
 		}
 	default:
 		config.InstallCommands = []string{
@@ -369,11 +357,6 @@ func getBaseToolsCommands(distro string, version string) []string {
 			"dnf install -y curl wget nano procps-ng net-tools",
 		}
 	case "oracle":
-		if version == "7" {
-			return []string{
-				"yum install -y curl wget nano procps-ng net-tools",
-			}
-		}
 		return []string{
 			"yum install -y curl wget nano procps-ng net-tools",
 		}
@@ -386,11 +369,6 @@ func getBaseToolsCommands(distro string, version string) []string {
 			"zypper install -y curl wget nano procps net-tools",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y curl wget nano procps-ng net-tools",
-			}
-		}
 		return []string{
 			"dnf install -y curl wget nano procps-ng net-tools",
 		}

@@ -71,11 +71,6 @@ func getGitInstallCommands(distro string, version string) []string {
 			"zypper install -y git",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y git",
-			}
-		}
 		return []string{
 			"dnf install -y git",
 		}

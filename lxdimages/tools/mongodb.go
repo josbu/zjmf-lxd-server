@@ -81,11 +81,6 @@ func getMongodbInstallCommands(distro string, version string) []string {
 			"zypper install -y mongodb mongodb-server",
 		}
 	case "amazonlinux":
-		if version == "2" {
-			return []string{
-				"yum install -y mongodb mongodb-server",
-			}
-		}
 		return []string{
 			"dnf install -y mongodb mongodb-server",
 		}
