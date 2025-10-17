@@ -408,8 +408,8 @@ echo
 echo "==== 步骤 3/6: 数据库与队列后端组合 ===="
 echo
 echo "请选择数据库与任务队列后端组合："
-echo "1. SQLite + Database 队列 (默认，轻量级，无需额外配置)"
-echo "2. SQLite + Redis 队列 (SQLite存储 + Redis高性能队列)"
+echo "1. SQLite + Database 队列 (轻量级方案)"
+echo "2. SQLite + Redis 队列 (标准方案)"
 echo "3. PostgreSQL + Redis 队列 (企业级方案)"
 echo "4. MySQL/MariaDB + Redis 队列 (传统企业级方案)"
 echo
@@ -425,46 +425,38 @@ case $DB_COMBO_CHOICE in
     DB_TYPE="sqlite"
     QUEUE_BACKEND="database"
     ok "已选择: SQLite + Database 队列 (轻量级方案)"
-    REDIS_HOST=""
-    REDIS_PORT=""
-    REDIS_PASSWORD=""
     ;;
   2)
     DB_TYPE="sqlite"
     QUEUE_BACKEND="redis"
-    ok "已选择: SQLite + Redis 队列"
-    echo
-    echo "==== Redis 配置 ===="
-    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
-    REDIS_HOST=${REDIS_HOST:-localhost}
+    ok "已选择: SQLite + Redis 队列 (使用本地Redis)"
     
-    read -p "Redis 端口 [6379]: " REDIS_PORT
-    REDIS_PORT=${REDIS_PORT:-6379}
-    
-    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    if ! command -v redis-server &> /dev/null; then
+      info "正在安装 Redis..."
+      apt update -y && apt install -y redis-server || err "Redis 安装失败"
+      systemctl enable redis-server
+      systemctl start redis-server
+      ok "Redis 安装完成"
+    else
+      ok "检测到 Redis 已安装"
+      systemctl is-active --quiet redis-server || {
+        info "正在启动 Redis 服务..."
+        systemctl start redis-server
+      }
+    fi
     
     if command -v redis-cli >/dev/null 2>&1; then
-      if [[ -n "$REDIS_PASSWORD" ]]; then
-        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" PING 2>/dev/null | grep -q PONG; then
-          ok "Redis 连接测试成功"
-        else
-          warn "Redis 连接测试失败，请检查配置"
-        fi
+      if redis-cli -h 127.0.0.1 -p 6379 PING 2>/dev/null | grep -q PONG; then
+        ok "本地 Redis 连接测试成功"
       else
-        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" PING 2>/dev/null | grep -q PONG; then
-          ok "Redis 连接测试成功"
-        else
-          warn "Redis 连接测试失败，请检查配置"
-        fi
+        warn "本地 Redis 连接测试失败"
       fi
-    else
-      warn "未找到 redis-cli 客户端，跳过连接测试"
     fi
     ;;
   3)
     DB_TYPE="postgres"
     QUEUE_BACKEND="redis"
-    ok "已选择: PostgreSQL + Redis 队列"
+    ok "已选择: PostgreSQL + Redis 队列 (使用本地Redis)"
     echo
     echo "==== PostgreSQL 配置 ===="
     warn "PostgreSQL 数据库需要您自行备份，请注意数据安全"
@@ -505,14 +497,19 @@ case $DB_COMBO_CHOICE in
     fi
     
     echo
-    echo "==== Redis 配置 ===="
-    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
-    REDIS_HOST=${REDIS_HOST:-localhost}
-    
-    read -p "Redis 端口 [6379]: " REDIS_PORT
-    REDIS_PORT=${REDIS_PORT:-6379}
-    
-    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    if ! command -v redis-server &> /dev/null; then
+      info "正在安装 Redis..."
+      apt update -y && apt install -y redis-server || err "Redis 安装失败"
+      systemctl enable redis-server
+      systemctl start redis-server
+      ok "Redis 安装完成"
+    else
+      ok "检测到 Redis 已安装"
+      systemctl is-active --quiet redis-server || {
+        info "正在启动 Redis 服务..."
+        systemctl start redis-server
+      }
+    fi
     ;;
   4)
     QUEUE_BACKEND="redis"
@@ -575,14 +572,19 @@ case $DB_COMBO_CHOICE in
     fi
     
     echo
-    echo "==== Redis 配置 ===="
-    read -p "Redis 服务器地址 [localhost]: " REDIS_HOST
-    REDIS_HOST=${REDIS_HOST:-localhost}
-    
-    read -p "Redis 端口 [6379]: " REDIS_PORT
-    REDIS_PORT=${REDIS_PORT:-6379}
-    
-    read -p "Redis 密码 (留空表示无密码): " REDIS_PASSWORD
+    if ! command -v redis-server &> /dev/null; then
+      info "正在安装 Redis..."
+      apt update -y && apt install -y redis-server || err "Redis 安装失败"
+      systemctl enable redis-server
+      systemctl start redis-server
+      ok "Redis 安装完成"
+    else
+      ok "检测到 Redis 已安装"
+      systemctl is-active --quiet redis-server || {
+        info "正在启动 Redis 服务..."
+        systemctl start redis-server
+      }
+    fi
     ;;
 esac
 
@@ -593,7 +595,7 @@ echo "==== 步骤 4/5: 流量监控性能配置 ===="
 echo
 echo "请选择流量监控性能方案："
 echo "1. 高性能模式 (适用独立服务器 8核+)         - CPU占用 10-15%, 封禁响应 ~10秒"
-echo "2. 标准模式 (适用独立服务器 4-8核, 推荐)    - CPU占用 5-10%, 封禁响应 ~15秒"
+echo "2. 标准模式 (适用独立服务器 4-8核)          - CPU占用 5-10%, 封禁响应 ~15秒"
 echo "3. 轻量模式 (适用独立服务器 2-4核)          - CPU占用 2-5%, 封禁响应 ~30秒"
 echo "4. 最小模式 (适用无独享内核或共享VPS)       - CPU占用 0.5-2%, 封禁响应 ~60秒"
 echo "5. 自定义模式 (手动配置所有参数)"
@@ -689,7 +691,7 @@ echo "1. IPv4 NAT (基础模式)"
 echo "2. IPv4 NAT + IPv6 NAT (双栈 NAT)"
 echo "3. IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
 echo "4. IPv4 NAT + IPv6 独立绑定 (混合模式)"
-echo "5. IPv6 独立绑定 (纯 IPv6 模式)"
+echo "5. IPv6 独立绑定 (纯 IPv6 公网 模式)"
 echo
 read -p "请选择网络模式 [1-5]: " NETWORK_MODE
 
@@ -727,7 +729,7 @@ case $NETWORK_MODE in
     NAT_SUPPORT="false"
     IPV6_NAT_SUPPORT="false"
     IPV6_BINDING_ENABLED="true"
-    ok "已选择: IPv6 独立绑定 (纯 IPv6 模式)"
+    ok "已选择: IPv6 独立绑定 (纯 IPv6 公网 模式)"
     ;;
 esac
 
@@ -882,15 +884,6 @@ else
 fi
 
 replace_config_var "QUEUE_BACKEND" "$QUEUE_BACKEND"
-if [[ $QUEUE_BACKEND == "redis" ]]; then
-  replace_config_var "REDIS_HOST" "$REDIS_HOST"
-  replace_config_var "REDIS_PORT" "$REDIS_PORT"
-  replace_config_var "REDIS_PASSWORD" "$REDIS_PASSWORD"
-else
-  replace_config_var "REDIS_HOST" "localhost"
-  replace_config_var "REDIS_PORT" "6379"
-  replace_config_var "REDIS_PASSWORD" ""
-fi
 
 replace_config_var "NAT_SUPPORT" "$NAT_SUPPORT"
 replace_config_var "IPV6_NAT_SUPPORT" "$IPV6_NAT_SUPPORT"
@@ -964,7 +957,7 @@ case $DB_TYPE in
 esac
 echo "  任务队列: $QUEUE_BACKEND"
 if [[ $QUEUE_BACKEND == "redis" ]]; then
-  echo "  Redis: $REDIS_HOST:$REDIS_PORT"
+  echo "  Redis: 127.0.0.1:6379 (本地)"
 fi
 echo
 echo "存储池配置: [$STORAGE_POOLS]"
@@ -975,7 +968,7 @@ case $NETWORK_MODE in
   2) echo "  IPv4 + IPv6 NAT";;
   3) echo "  全功能模式 (IPv4 NAT + IPv6 NAT + IPv6 独立绑定)";;
   4) echo "  混合模式 (IPv4 NAT + IPv6 独立绑定)";;
-  5) echo "  纯 IPv6 模式";;
+  5) echo "  纯 IPv6 公网 模式";;
 esac
 echo
 echo "流量监控性能:"
