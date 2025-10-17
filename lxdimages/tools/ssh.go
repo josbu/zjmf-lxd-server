@@ -182,7 +182,8 @@ func GetSSHConfig(distro string, version string) SSHConfig {
 		}
 	case "alpine":
 		sshConfigCommands = []string{
-			"sed -i.bak 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+			"sed -i.bak 's/^GatewayPort/#GatewayPort/' /etc/ssh/sshd_config",
+			"sed -i 's/#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
 			"sed -i 's/#*Port.*/Port 22/' /etc/ssh/sshd_config",
@@ -263,16 +264,7 @@ func GetSSHConfig(distro string, version string) SSHConfig {
 		"rm -rf /tmp/* /var/tmp/*",
 	}
 
-	switch distro {
-	case "alpine":
-		config.CleanupCommands = append(baseCleanupCommands,
-			"rc-service sshd stop",
-			"killall sshd 2>/dev/null || true",
-			"pkill -f sshd 2>/dev/null || true",
-		)
-	default:
-		config.CleanupCommands = baseCleanupCommands
-	}
+	config.CleanupCommands = baseCleanupCommands
 
 	return config
 }
