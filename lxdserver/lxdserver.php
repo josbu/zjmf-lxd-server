@@ -21,7 +21,7 @@ function lxdserver_MetaData()
 {
     return [
         'DisplayName' => '魔方财务-LXD对接插件 by xkatld',
-        'APIVersion'  => '1.0.1',
+        'APIVersion'  => '1.0.2',
         'HelpDoc'     => 'https://github.com/xkatld/zjmf-lxd-server',
     ];
 }
@@ -179,6 +179,14 @@ function lxdserver_ConfigOptions()
             'default'     => 'false',
             'key'         => 'privileged',
             'options'     => ['false' => '禁用', 'true' => '启用'],
+        ],
+        'enable_lxcfs' => [
+            'type'        => 'dropdown',
+            'name'        => 'LXCFS资源视图',
+            'description' => '启用后容器内将显示真实的资源限制（推荐启用，提升应用兼容性）',
+            'default'     => 'true',
+            'key'         => 'enable_lxcfs',
+            'options'     => ['true' => '启用', 'false' => '禁用'],
         ],
     ];
 }
@@ -469,6 +477,7 @@ function lxdserver_CreateAccount($params)
             'max_processes'  => (int)($params['configoptions']['max_processes'] ?? 512),
             'disk_io_limit'   => $params['configoptions']['disk_io_limit'] ?? '',
             'privileged'     => ($params['configoptions']['privileged'] ?? 'false') === 'true',
+            'enable_lxcfs'   => ($params['configoptions']['enable_lxcfs'] ?? 'true') === 'true',
         ],
     ];
 
@@ -869,6 +878,7 @@ function lxdserver_Reinstall($params)
             'max_processes'  => (int)($params['configoptions']['max_processes'] ?? 512),
             'disk_io_limit'   => $params['configoptions']['disk_io_limit'] ?? '',
             'privileged'     => ($params['configoptions']['privileged'] ?? 'false') === 'true',
+            'enable_lxcfs'   => ($params['configoptions']['enable_lxcfs'] ?? 'true') === 'true',
         ],
     ];
     $res = lxdserver_JSONCurl($params, $data, 'POST');
