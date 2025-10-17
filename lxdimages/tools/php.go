@@ -11,7 +11,7 @@ func ConfigurePhp(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getPhpInstallCommands(distro)
+	installCommands := getPhpInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigurePhp(containerName, distro, version string) error {
 	return nil
 }
 
-func getPhpInstallCommands(distro string) []string {
+func getPhpInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getPhpInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y php php-fpm php-cli php-mbstring php-curl php-zip php-mysql php-pgsql",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y php php-fpm php-cli php-common php-mbstring php-xml php-curl php-zip php-mysqlnd php-pgsql",
+			}
+		}
 		return []string{
-			"yum install -y php php-fpm php-cli php-common php-mbstring php-xml php-curl php-zip php-mysqlnd php-pgsql",
+			"dnf install -y php php-fpm php-cli php-common php-mbstring php-xml php-curl php-zip php-mysqlnd php-pgsql",
 		}
 	default:
 		return []string{

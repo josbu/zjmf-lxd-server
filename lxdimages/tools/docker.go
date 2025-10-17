@@ -11,7 +11,7 @@ func ConfigureDocker(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getDockerInstallCommands(distro)
+	installCommands := getDockerInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -43,7 +43,7 @@ func ConfigureDocker(containerName, distro, version string) error {
 	fmt.Printf(" OK\n")
 
 	fmt.Printf("     清理缓存...")
-	cleanupCommands := getDockerCleanupCommands(distro)
+	cleanupCommands := getDockerCleanupCommands(distro, version)
 	for _, cmdStr := range cleanupCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureDocker(containerName, distro, version string) error {
 	return nil
 }
 
-func getDockerInstallCommands(distro string) []string {
+func getDockerInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -67,6 +67,11 @@ func getDockerInstallCommands(distro string) []string {
 			"dnf install -y docker docker-compose",
 		}
 	case "oracle":
+		if version == "7" {
+			return []string{
+				"yum install -y docker",
+			}
+		}
 		return []string{
 			"yum install -y docker-engine docker-compose",
 		}
@@ -77,12 +82,17 @@ func getDockerInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y docker docker-compose",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y docker",
+			}
+		}
 		return []string{
-			"yum install -y docker",
+			"dnf install -y docker",
 		}
 	default:
 		return []string{
@@ -117,7 +127,7 @@ func getDockerEnableCommands(distro string) []string {
 	}
 }
 
-func getDockerCleanupCommands(distro string) []string {
+func getDockerCleanupCommands(distro string, version string) []string {
 	return []string{
 		"docker system prune -af || true",
 	}

@@ -11,7 +11,7 @@ func ConfigureGolang(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getGolangInstallCommands(distro)
+	installCommands := getGolangInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -45,7 +45,7 @@ func ConfigureGolang(containerName, distro, version string) error {
 	return nil
 }
 
-func getGolangInstallCommands(distro string) []string {
+func getGolangInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -67,12 +67,17 @@ func getGolangInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y go",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y golang",
+			}
+		}
 		return []string{
-			"yum install -y golang",
+			"dnf install -y golang",
 		}
 	default:
 		return []string{

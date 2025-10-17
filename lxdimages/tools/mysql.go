@@ -11,7 +11,7 @@ func ConfigureMysql(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getMysqlInstallCommands(distro)
+	installCommands := getMysqlInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureMysql(containerName, distro, version string) error {
 	return nil
 }
 
-func getMysqlInstallCommands(distro string) []string {
+func getMysqlInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getMysqlInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y mysql mysql-server",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y mariadb-server",
+			}
+		}
 		return []string{
-			"yum install -y mariadb-server",
+			"dnf install -y mariadb105-server mariadb105",
 		}
 	default:
 		return []string{

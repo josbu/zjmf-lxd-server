@@ -11,7 +11,7 @@ func ConfigureRedis(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getRedisInstallCommands(distro)
+	installCommands := getRedisInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureRedis(containerName, distro, version string) error {
 	return nil
 }
 
-func getRedisInstallCommands(distro string) []string {
+func getRedisInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getRedisInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y redis",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y redis6",
+			}
+		}
 		return []string{
-			"yum install -y redis",
+			"dnf install -y redis6",
 		}
 	default:
 		return []string{

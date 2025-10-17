@@ -23,7 +23,7 @@ var SupportedDistros = map[string][]string{
 	"ubuntu":      {"jammy", "noble", "plucky"},
 	"debian":      {"bullseye", "bookworm", "trixie"},
 	"centos":      {"9-Stream", "10-Stream"},
-	"fedora":      {"40", "41", "42"},
+	"fedora":      {"41", "42"},
 	"almalinux":   {"8", "9", "10"},
 	"rockylinux":  {"8", "9", "10"},
 	"oracle":      {"7", "8", "9"},
@@ -93,7 +93,7 @@ func getVersionSpecificOptimizations(distro, version string) []string {
 	return []string{}
 }
 
-func GetSSHConfig(distro string) SSHConfig {
+func GetSSHConfig(distro string, version string) SSHConfig {
 	config := SSHConfig{}
 
 	switch distro {
@@ -120,8 +120,15 @@ func GetSSHConfig(distro string) SSHConfig {
 			"dnf install -y openssh-server sudo ca-certificates",
 		}
 	case "oracle":
-		config.InstallCommands = []string{
-			"yum install -y openssh-server sudo ca-certificates",
+		if version == "7" {
+			config.InstallCommands = []string{
+				"yum install -y openssh-server sudo ca-certificates",
+			}
+		} else {
+			config.InstallCommands = []string{
+				"yum install -y oracle-epel-release-el8 || yum install -y oracle-epel-release-el9 || true",
+				"yum install -y openssh-server sudo ca-certificates",
+			}
 		}
 	case "alpine":
 		config.InstallCommands = []string{
@@ -130,13 +137,18 @@ func GetSSHConfig(distro string) SSHConfig {
 		}
 	case "opensuse":
 		config.InstallCommands = []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y openssh-server sudo ca-certificates",
 		}
 	case "amazonlinux":
-		config.InstallCommands = []string{
-			"yum update -y -q",
-			"yum install -y openssh-server sudo ca-certificates",
+		if version == "2" {
+			config.InstallCommands = []string{
+				"yum install -y openssh-server sudo ca-certificates shadow-utils",
+			}
+		} else {
+			config.InstallCommands = []string{
+				"dnf install -y openssh-server sudo ca-certificates shadow-utils",
+			}
 		}
 	default:
 		config.InstallCommands = []string{
@@ -282,7 +294,7 @@ func ConfigureSSH(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	config := GetSSHConfig(distro)
+	config := GetSSHConfig(distro, version)
 
 	for _, cmdStr := range config.InstallCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
@@ -313,7 +325,7 @@ func ConfigureSSH(containerName, distro, version string) error {
 	fmt.Printf(" OK\n")
 
 	fmt.Printf("     安装基础工具...")
-	toolCommands := getBaseToolsCommands(distro)
+	toolCommands := getBaseToolsCommands(distro, version)
 	for _, cmdStr := range toolCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -346,7 +358,7 @@ func ConfigureSSH(containerName, distro, version string) error {
 	return nil
 }
 
-func getBaseToolsCommands(distro string) []string {
+func getBaseToolsCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -357,6 +369,11 @@ func getBaseToolsCommands(distro string) []string {
 			"dnf install -y curl wget nano procps-ng net-tools",
 		}
 	case "oracle":
+		if version == "7" {
+			return []string{
+				"yum install -y curl wget nano procps-ng net-tools",
+			}
+		}
 		return []string{
 			"yum install -y curl wget nano procps-ng net-tools",
 		}
@@ -369,8 +386,13 @@ func getBaseToolsCommands(distro string) []string {
 			"zypper install -y curl wget nano procps net-tools",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y curl wget nano procps-ng net-tools",
+			}
+		}
 		return []string{
-			"yum install -y curl wget nano procps-ng net-tools",
+			"dnf install -y curl wget nano procps-ng net-tools",
 		}
 	default:
 		return []string{

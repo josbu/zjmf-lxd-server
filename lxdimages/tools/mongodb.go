@@ -11,7 +11,7 @@ func ConfigureMongodb(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getMongodbInstallCommands(distro)
+	installCommands := getMongodbInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureMongodb(containerName, distro, version string) error {
 	return nil
 }
 
-func getMongodbInstallCommands(distro string) []string {
+func getMongodbInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getMongodbInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y mongodb mongodb-server",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y mongodb mongodb-server",
+			}
+		}
 		return []string{
-			"yum install -y mongodb mongodb-server",
+			"dnf install -y mongodb mongodb-server",
 		}
 	default:
 		return []string{

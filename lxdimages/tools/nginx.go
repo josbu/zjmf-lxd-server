@@ -11,7 +11,7 @@ func ConfigureNginx(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getNginxInstallCommands(distro)
+	installCommands := getNginxInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureNginx(containerName, distro, version string) error {
 	return nil
 }
 
-func getNginxInstallCommands(distro string) []string {
+func getNginxInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getNginxInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y nginx",
 		}
 	case "amazonlinux":
+		if UseYum(distro, version) {
+			return []string{
+				"yum install -y nginx",
+			}
+		}
 		return []string{
-			"yum install -y nginx",
+			"dnf install -y nginx",
 		}
 	default:
 		return []string{

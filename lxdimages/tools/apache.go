@@ -11,7 +11,7 @@ func ConfigureApache(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getApacheInstallCommands(distro)
+	installCommands := getApacheInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigureApache(containerName, distro, version string) error {
 	return nil
 }
 
-func getApacheInstallCommands(distro string) []string {
+func getApacheInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getApacheInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y apache2",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y httpd",
+			}
+		}
 		return []string{
-			"yum install -y httpd",
+			"dnf install -y httpd",
 		}
 	default:
 		return []string{

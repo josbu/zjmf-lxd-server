@@ -11,7 +11,7 @@ func ConfigurePostgresql(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getPostgresqlInstallCommands(distro)
+	installCommands := getPostgresqlInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -55,7 +55,7 @@ func ConfigurePostgresql(containerName, distro, version string) error {
 	return nil
 }
 
-func getPostgresqlInstallCommands(distro string) []string {
+func getPostgresqlInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -77,12 +77,17 @@ func getPostgresqlInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y postgresql-server postgresql-contrib",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y postgresql15-server postgresql15-contrib",
+			}
+		}
 		return []string{
-			"yum install -y postgresql-server postgresql-contrib",
+			"dnf install -y postgresql15-server postgresql15-contrib",
 		}
 	default:
 		return []string{

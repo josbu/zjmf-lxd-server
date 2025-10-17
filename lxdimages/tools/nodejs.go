@@ -11,7 +11,7 @@ func ConfigureNodejs(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getNodejsInstallCommands(distro)
+	installCommands := getNodejsInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -57,7 +57,7 @@ func ConfigureNodejs(containerName, distro, version string) error {
 	return nil
 }
 
-func getNodejsInstallCommands(distro string) []string {
+func getNodejsInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -79,12 +79,17 @@ func getNodejsInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y nodejs npm",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y nodejs npm",
+			}
+		}
 		return []string{
-			"yum install -y nodejs npm",
+			"dnf install -y nodejs npm",
 		}
 	default:
 		return []string{

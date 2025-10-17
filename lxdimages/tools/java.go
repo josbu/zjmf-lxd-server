@@ -11,7 +11,7 @@ func ConfigureJava(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getJavaInstallCommands(distro)
+	installCommands := getJavaInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -45,7 +45,7 @@ func ConfigureJava(containerName, distro, version string) error {
 	return nil
 }
 
-func getJavaInstallCommands(distro string) []string {
+func getJavaInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -67,12 +67,17 @@ func getJavaInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y java-openjdk java-openjdk-devel",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y java-21-amazon-corretto java-21-amazon-corretto-devel",
+			}
+		}
 		return []string{
-			"yum install -y java-latest-amazon-corretto java-latest-amazon-corretto-devel",
+			"dnf install -y java-21-amazon-corretto java-21-amazon-corretto-devel",
 		}
 	default:
 		return []string{

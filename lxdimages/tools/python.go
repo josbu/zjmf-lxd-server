@@ -11,7 +11,7 @@ func ConfigurePython(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getPythonInstallCommands(distro)
+	installCommands := getPythonInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -45,7 +45,7 @@ func ConfigurePython(containerName, distro, version string) error {
 	return nil
 }
 
-func getPythonInstallCommands(distro string) []string {
+func getPythonInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -67,12 +67,17 @@ func getPythonInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y python3 python3-pip python3-devel",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y python3 python3-pip python3-devel",
+			}
+		}
 		return []string{
-			"yum install -y python3 python3-pip python3-devel",
+			"dnf install -y python3 python3-pip python3-devel",
 		}
 	default:
 		return []string{

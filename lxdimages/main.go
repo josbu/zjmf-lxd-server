@@ -52,6 +52,10 @@ func main() {
 	}
 	
 	arch := getSystemArch()
+	
+	if distro == "amazonlinux" && version == "2023" && arch == "arm64" {
+		log.Fatal("错误: Amazon Linux 2023 不支持 arm64 架构，请使用 amd64 系统或选择 Amazon Linux 2")
+	}
 
 	var toolsList []string
 	customName := ""
@@ -787,7 +791,11 @@ func showHelp() {
 	distros := []string{"ubuntu", "debian", "centos", "fedora", "almalinux", "rockylinux", "oracle", "opensuse", "alpine", "amazonlinux"}
 	for _, distro := range distros {
 		if versions, ok := tools.SupportedDistros[distro]; ok {
-			fmt.Printf("  %-15s %s\n", distro+":", strings.Join(versions, ", "))
+			versionStr := strings.Join(versions, ", ")
+			if distro == "amazonlinux" {
+				versionStr += " (2023仅amd64)"
+			}
+			fmt.Printf("  %-15s %s\n", distro+":", versionStr)
 		}
 	}
 	

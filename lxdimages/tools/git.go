@@ -11,7 +11,7 @@ func ConfigureGit(containerName, distro, version string) error {
 	
 	time.Sleep(3 * time.Second)
 
-	installCommands := getGitInstallCommands(distro)
+	installCommands := getGitInstallCommands(distro, version)
 	for _, cmdStr := range installCommands {
 		cmd := exec.Command("lxc", "exec", containerName, "--", "sh", "-c", cmdStr)
 		cmd.Stdout = nil
@@ -45,7 +45,7 @@ func ConfigureGit(containerName, distro, version string) error {
 	return nil
 }
 
-func getGitInstallCommands(distro string) []string {
+func getGitInstallCommands(distro string, version string) []string {
 	switch distro {
 	case "ubuntu", "debian":
 		return []string{
@@ -67,12 +67,17 @@ func getGitInstallCommands(distro string) []string {
 		}
 	case "opensuse":
 		return []string{
-			"zypper refresh -q",
+			"zypper refresh",
 			"zypper install -y git",
 		}
 	case "amazonlinux":
+		if version == "2" {
+			return []string{
+				"yum install -y git",
+			}
+		}
 		return []string{
-			"yum install -y git",
+			"dnf install -y git",
 		}
 	default:
 		return []string{
