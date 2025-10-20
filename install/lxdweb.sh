@@ -173,6 +173,8 @@ backup_database() {
 }
 
 TMP_DB=$(mktemp -d)
+[[ -z "$TMP_DB" || ! -d "$TMP_DB" ]] && err "创建临时目录失败"
+
 if [[ $UPGRADE == true ]]; then
   backup_database
   
@@ -196,6 +198,8 @@ mkdir -p "$DIR"
 mkdir -p "$DIR/backups"
 
 TMP=$(mktemp -d)
+[[ -z "$TMP" || ! -d "$TMP" ]] && err "创建下载临时目录失败"
+
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
 unzip -qo "$TMP/app.zip" -d "$DIR"
 chmod +x "$DIR/$BIN"
