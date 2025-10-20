@@ -1,5 +1,5 @@
 // @title LXD Web 管理平台
-// @version 1.0.1
+// @version 1.0.2
 // @description LXD 容器管理 Web 平台，提供多节点管理、容器监控、NAT 配置等功能
 // @termsOfService https://github.com/xkatld/zjmf-lxd-server
 
@@ -97,6 +97,12 @@ func startWebServer() {
 	{
 		auth.GET("/dashboard", handlers.DashboardPage)
 		auth.GET("/nodes", handlers.NodesPage)
+		auth.GET("/nodes/:id", handlers.NodeDetailPage)
+		auth.GET("/nodes/:id/containers", handlers.NodeContainersPage)
+		auth.GET("/nodes/:id/containers/:name", handlers.ContainerDetailPage)
+		auth.GET("/nodes/:id/nat", handlers.NodeNATPage)
+		auth.GET("/nodes/:id/ipv6", handlers.NodeIPv6Page)
+		auth.GET("/nodes/:id/proxy", handlers.NodeProxyPage)
 		auth.GET("/api/nodes", handlers.GetNodes)
 		auth.GET("/api/nodes/:id", handlers.GetNode)
 		auth.POST("/api/nodes", handlers.CreateNode)
@@ -104,24 +110,31 @@ func startWebServer() {
 		auth.DELETE("/api/nodes/:id", handlers.DeleteNode)
 		auth.POST("/api/nodes/:id/test", handlers.TestNode)
 		auth.POST("/api/nodes/:id/refresh", handlers.RefreshNodeCache)
-		auth.GET("/containers", handlers.ContainersPage)
+		
+		// 容器API（保留API接口，但去掉全局页面入口）
 		auth.GET("/api/containers", handlers.GetContainers)
 		auth.GET("/api/containers/cache", handlers.GetContainersFromCache)
-		auth.GET("/nat", handlers.NATPage)
 		auth.GET("/api/containers/:name", handlers.GetContainerDetail)
 		auth.POST("/api/containers/:name/start", handlers.StartContainer)
 		auth.POST("/api/containers/:name/stop", handlers.StopContainer)
 		auth.POST("/api/containers/:name/restart", handlers.RestartContainer)
 		auth.POST("/api/containers/:name/delete", handlers.DeleteContainer)
 		auth.POST("/api/containers/:name/refresh", handlers.RefreshSingleContainer)
+		auth.POST("/api/containers/:name/reinstall", handlers.ReinstallContainer)
+		auth.POST("/api/containers/:name/password", handlers.ResetContainerPassword)
+		auth.POST("/api/containers/:name/suspend", handlers.SuspendContainer)
+		auth.POST("/api/containers/:name/unsuspend", handlers.UnsuspendContainer)
+		auth.POST("/api/containers/:name/traffic/reset", handlers.ResetContainerTraffic)
 		auth.POST("/api/containers/create", handlers.CreateContainer)
+		// NAT API（保留API接口，但去掉全局页面入口）
 		auth.GET("/api/nat", handlers.GetNATRules)
 		auth.GET("/api/nat/:id", handlers.GetNATRule)
+		auth.GET("/api/nat/check", handlers.CheckNATPort)
 		auth.POST("/api/nat", handlers.CreateNATRule)
 		auth.PUT("/api/nat/:id", handlers.UpdateNATRule)
 		auth.DELETE("/api/nat/:id", handlers.DeleteNATRule)
 		auth.POST("/api/nat/sync", handlers.SyncNATRules)
-		auth.POST("/api/console/token", handlers.CreateConsoleToken)
+		auth.POST("/api/console/create-token", handlers.CreateConsoleToken)
 
 		auth.POST("/api/sync/all", handlers.SyncAllNodes)
 		auth.POST("/api/sync/node/:id", handlers.SyncNode)
@@ -134,7 +147,7 @@ func startWebServer() {
 		auth.GET("/api/nat-sync/status", handlers.GetNATSyncStatus)
 		auth.GET("/api/nat/cache", handlers.GetNATRulesFromCache)
 
-		auth.GET("/ipv6", handlers.IPv6Page)
+		// IPv6 API（保留API接口，但去掉全局页面入口）
 		auth.GET("/api/ipv6", handlers.GetIPv6Bindings)
 		auth.POST("/api/ipv6", handlers.CreateIPv6Binding)
 		auth.DELETE("/api/ipv6/:id", handlers.DeleteIPv6Binding)
@@ -144,8 +157,9 @@ func startWebServer() {
 		auth.GET("/api/ipv6-sync/status", handlers.GetIPv6SyncStatus)
 		auth.GET("/api/ipv6-sync/tasks", handlers.GetIPv6SyncTasks)
 
-		auth.GET("/proxy", handlers.ProxyPage)
+		// 反向代理 API（保留API接口，但去掉全局页面入口）
 		auth.GET("/api/proxy-configs", handlers.GetProxyConfigs)
+		auth.GET("/api/proxy/check", handlers.CheckProxyDomain)
 		auth.POST("/api/proxy-configs", handlers.CreateProxyConfig)
 		auth.DELETE("/api/proxy-configs/:id", handlers.DeleteProxyConfig)
 		auth.POST("/api/proxy-configs/sync", handlers.SyncProxyConfigs)

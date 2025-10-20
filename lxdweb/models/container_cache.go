@@ -18,7 +18,9 @@ type ContainerCache struct {
 	CPUs           int            `json:"cpus"`
 	Memory         string         `json:"memory" gorm:"size:50"`
 	Disk           string         `json:"disk" gorm:"size:50"`
-	TrafficLimit   int            `json:"traffic_limit"` 
+	TrafficLimit   int            `json:"traffic_limit"`
+	Ingress        string         `json:"ingress" gorm:"size:50"`
+	Egress         string         `json:"egress" gorm:"size:50"` 
 	
 	CPUUsage       float64        `json:"cpu_usage"`
 	MemoryUsage    uint64         `json:"memory_usage"`

@@ -1,5 +1,6 @@
 package handlers
 import (
+	"fmt"
 	"lxdweb/database"
 	"lxdweb/models"
 	"net/http"
@@ -298,4 +299,52 @@ func SyncNATRules(c *gin.Context) {
 		"msg":  "同步成功",
 		"data": result["data"],
 	})
+}
+
+// CheckNATPort 检查NAT端口是否可用
+// @Summary 检查NAT端口是否可用
+// @Description 检查指定端口和协议是否可用于NAT转发
+// @Tags NAT管理
+// @Produce json
+// @Param node_id query string true "节点ID"
+// @Param hostname query string true "容器名称"
+// @Param protocol query string true "协议类型(tcp/udp)"
+// @Param port query int true "端口号"
+// @Success 200 {object} map[string]interface{} "检查结果"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/nat/check [get]
+func CheckNATPort(c *gin.Context) {
+	nodeID := c.Query("node_id")
+	hostname := c.Query("hostname")
+	protocol := c.Query("protocol")
+	port := c.Query("port")
+
+	if nodeID == "" || hostname == "" || protocol == "" || port == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "缺少必要参数",
+			"data": map[string]interface{}{
+				"available": false,
+				"reason":    "缺少必要参数",
+			},
+		})
+		return
+	}
+
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+			"data": map[string]interface{}{
+				"available": false,
+				"reason":    "节点不存在",
+			},
+		})
+		return
+	}
+
+	result := callNodeAPI(node, "GET", fmt.Sprintf("/api/nat/check?hostname=%s&protocol=%s&port=%s", hostname, protocol, port), nil)
+	c.JSON(http.StatusOK, result)
 }

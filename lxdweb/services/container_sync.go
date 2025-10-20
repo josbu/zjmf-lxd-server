@@ -353,7 +353,7 @@ func updateContainerCache(node models.Node, data map[string]interface{}) error {
 		updates["cpus"] = int(cpus)
 	}
 
-	var memory, disk string
+	var memory, disk, ingress, egress string
 	var trafficLimit int
 	if config, ok := data["config"].(map[string]interface{}); ok {
 		if mem, ok := config["memory"].(string); ok {
@@ -364,6 +364,12 @@ func updateContainerCache(node models.Node, data map[string]interface{}) error {
 		}
 		if limit, ok := config["traffic_limit"].(float64); ok {
 			trafficLimit = int(limit)
+		}
+		if ing, ok := config["ingress"].(string); ok {
+			ingress = ing
+		}
+		if egr, ok := config["egress"].(string); ok {
+			egress = egr
 		}
 	}
 
@@ -386,6 +392,12 @@ func updateContainerCache(node models.Node, data map[string]interface{}) error {
 	}
 	if trafficLimit > 0 {
 		updates["traffic_limit"] = trafficLimit
+	}
+	if ingress != "" {
+		updates["ingress"] = ingress
+	}
+	if egress != "" {
+		updates["egress"] = egress
 	}
 
 	if cpuUsage, ok := data["cpu_percent"].(float64); ok {
@@ -444,6 +456,12 @@ func updateContainerCache(node models.Node, data map[string]interface{}) error {
 	if trafficLimit, ok := updates["traffic_limit"].(int); ok {
 		cache.TrafficLimit = trafficLimit
 	}
+	if ingress, ok := updates["ingress"].(string); ok {
+		cache.Ingress = ingress
+	}
+	if egress, ok := updates["egress"].(string); ok {
+		cache.Egress = egress
+	}
 	if cpuUsage, ok := updates["cpu_usage"].(float64); ok {
 		cache.CPUUsage = cpuUsage
 	}
@@ -480,6 +498,7 @@ func updateContainerCache(node models.Node, data map[string]interface{}) error {
 		DoUpdates: clause.AssignmentColumns([]string{
 			"node_name", "status", "ipv4", "ipv6", "image",
 			"cpus", "memory", "disk", "traffic_limit",
+			"ingress", "egress",
 			"cpu_usage", "memory_usage", "memory_total",
 			"disk_usage", "disk_total",
 			"traffic_total", "traffic_in", "traffic_out",

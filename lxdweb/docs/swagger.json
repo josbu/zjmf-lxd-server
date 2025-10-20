@@ -13,7 +13,7 @@
             "name": "MIT",
             "url": "https://github.com/xkatld/zjmf-lxd-server/blob/main/LICENSE"
         },
-        "version": "1.0.1"
+        "version": "1.0.2"
     },
     "host": "localhost:3000",
     "basePath": "/",
@@ -215,14 +215,22 @@
         },
         "/api/containers/cache": {
             "get": {
-                "description": "调用所有活跃节点的lxdapi /api/cache/containers接口快速获取容器信息",
+                "description": "从本地数据库缓存获取容器列表，支持按node_id筛选",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "容器管理"
                 ],
-                "summary": "从lxdapi缓存获取容器列表",
+                "summary": "从本地数据库缓存获取容器列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "成功返回容器列表",
@@ -378,6 +386,62 @@
                 }
             }
         },
+        "/api/containers/{name}/password": {
+            "post": {
+                "description": "重置指定容器的root密码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "容器管理"
+                ],
+                "summary": "重置容器密码",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "密码参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重置成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/containers/{name}/refresh": {
             "post": {
                 "description": "实时获取指定容器的最新信息并更新缓存",
@@ -407,6 +471,62 @@
                 "responses": {
                     "200": {
                         "description": "刷新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/containers/{name}/reinstall": {
+            "post": {
+                "description": "重装指定容器的操作系统",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "容器管理"
+                ],
+                "summary": "重装容器系统",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "重装参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重装成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -539,6 +659,138 @@
                 "responses": {
                     "200": {
                         "description": "停止成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/containers/{name}/suspend": {
+            "post": {
+                "description": "暂停指定的容器（Frozen状态）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "容器管理"
+                ],
+                "summary": "暂停容器",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "暂停成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/containers/{name}/traffic/reset": {
+            "post": {
+                "description": "重置指定容器的流量统计",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "容器管理"
+                ],
+                "summary": "重置容器流量",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重置成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/containers/{name}/unsuspend": {
+            "post": {
+                "description": "恢复被暂停的容器",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "容器管理"
+                ],
+                "summary": "恢复容器",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "恢复成功",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1190,6 +1442,71 @@
                     },
                     "401": {
                         "description": "未登录",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/nat/check": {
+            "get": {
+                "description": "检查指定端口和协议是否可用于NAT转发",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "NAT管理"
+                ],
+                "summary": "检查NAT端口是否可用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "容器名称",
+                        "name": "hostname",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "协议类型(tcp/udp)",
+                        "name": "protocol",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "端口号",
+                        "name": "port",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "检查结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1964,6 +2281,57 @@
                 }
             }
         },
+        "/api/proxy/check": {
+            "get": {
+                "description": "检查指定域名是否可用于反向代理配置",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "反向代理管理"
+                ],
+                "summary": "检查反向代理域名是否可用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "node_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "域名",
+                        "name": "domain",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "检查结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "节点不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/sync/all": {
             "post": {
                 "description": "启动所有活跃节点的容器信息同步任务",
@@ -2204,6 +2572,35 @@
                     "节点管理"
                 ],
                 "summary": "节点管理页面",
+                "responses": {
+                    "200": {
+                        "description": "HTML页面",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{id}": {
+            "get": {
+                "description": "显示单个节点的详细信息和管理界面",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "节点管理"
+                ],
+                "summary": "节点详情页面",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "节点ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "HTML页面",

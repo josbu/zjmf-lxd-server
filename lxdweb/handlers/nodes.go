@@ -43,6 +43,93 @@ func NodesPage(c *gin.Context) {
 		"username": username,
 	})
 }
+
+// NodeDetailPage 节点详情页面
+// @Summary 节点详情页面
+// @Description 显示单个节点的详细信息和管理界面
+// @Tags 节点管理
+// @Produce html
+// @Param id path string true "节点ID"
+// @Success 200 {string} string "HTML页面"
+// @Router /nodes/{id} [get]
+func NodeDetailPage(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	
+	c.HTML(http.StatusOK, "node_detail.html", gin.H{
+		"title":    "节点详情 - LXD管理后台",
+		"username": username,
+		"node_id":  nodeID,
+	})
+}
+
+// NodeContainersPage 节点容器列表页面
+func NodeContainersPage(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	
+	c.HTML(http.StatusOK, "node_containers.html", gin.H{
+		"title":    "容器列表 - LXD管理后台",
+		"username": username,
+		"node_id":  nodeID,
+	})
+}
+
+// ContainerDetailPage 容器详情页面
+func ContainerDetailPage(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	containerName := c.Param("name")
+	
+	c.HTML(http.StatusOK, "container_detail.html", gin.H{
+		"title":          "容器详情 - LXD管理后台",
+		"username":       username,
+		"node_id":        nodeID,
+		"container_name": containerName,
+	})
+}
+
+// NodeNATPage 节点NAT列表页面
+func NodeNATPage(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	
+	c.HTML(http.StatusOK, "node_nat.html", gin.H{
+		"title":    "NAT规则 - LXD管理后台",
+		"username": username,
+		"node_id":  nodeID,
+	})
+}
+
+// NodeIPv6Page 节点IPv6列表页面
+func NodeIPv6Page(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	
+	c.HTML(http.StatusOK, "node_ipv6.html", gin.H{
+		"title":    "IPv6绑定 - LXD管理后台",
+		"username": username,
+		"node_id":  nodeID,
+	})
+}
+
+// NodeProxyPage 节点代理列表页面
+func NodeProxyPage(c *gin.Context) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	nodeID := c.Param("id")
+	
+	c.HTML(http.StatusOK, "node_proxy.html", gin.H{
+		"title":    "反向代理 - LXD管理后台",
+		"username": username,
+		"node_id":  nodeID,
+	})
+}
 // GetNodes 获取节点列表
 // @Summary 获取节点列表
 // @Description 查询所有LXD节点及其系统信息，支持按状态过滤
@@ -405,9 +492,12 @@ func RefreshNodeCache(c *gin.Context) {
 		return
 	}
 	
+	// 刷新容器缓存（从lxdapi缓存快速复制）
+	go services.RefreshNodeContainers(uint(idInt), true)
+	
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "节点系统信息刷新成功",
+		"msg":  "刷新任务已启动",
 	})
 }
 

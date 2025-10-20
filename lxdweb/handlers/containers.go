@@ -72,11 +72,12 @@ func GetContainers(c *gin.Context) {
 	})
 }
 
-// GetContainersFromCache 从lxdapi缓存获取容器列表
-// @Summary 从lxdapi缓存获取容器列表
-// @Description 调用所有活跃节点的lxdapi /api/cache/containers接口快速获取容器信息
+// GetContainersFromCache 从本地数据库缓存获取容器列表
+// @Summary 从本地数据库缓存获取容器列表
+// @Description 从本地数据库缓存获取容器列表，支持按node_id筛选
 // @Tags 容器管理
 // @Produce json
+// @Param node_id query string false "节点ID"
 // @Success 200 {object} map[string]interface{} "成功返回容器列表"
 // @Failure 401 {object} map[string]interface{} "未登录"
 // @Router /api/containers/cache [get]
@@ -90,27 +91,29 @@ func GetContainersFromCache(c *gin.Context) {
 		})
 		return
 	}
-	var nodes []models.Node
-	database.DB.Where("status = ?", "active").Find(&nodes)
-	allContainers := make([]map[string]interface{}, 0)
-	for _, node := range nodes {
-		result := callNodeAPI(node, "GET", "/api/cache/containers", nil)
-		if result["code"] == float64(200) {
-			if data, ok := result["data"].([]interface{}); ok {
-				for _, item := range data {
-					if container, ok := item.(map[string]interface{}); ok {
-						container["node_id"] = node.ID
-						container["node_name"] = node.Name
-						allContainers = append(allContainers, container)
-					}
-				}
-			}
-		}
+
+	// 从本地数据库缓存查询
+	var containers []models.ContainerCache
+	query := database.DB.Order("node_id ASC, hostname ASC")
+	
+	// 支持按 node_id 筛选
+	if nodeID := c.Query("node_id"); nodeID != "" {
+		query = query.Where("node_id = ?", nodeID)
 	}
+	
+	if err := query.Find(&containers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "查询失败",
+			"data": []interface{}{},
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "success",
-		"data": allContainers,
+		"msg":  "查询成功",
+		"data": containers,
 	})
 }
 // GetContainerDetail 获取容器详细信息
@@ -287,6 +290,222 @@ func RefreshSingleContainer(c *gin.Context) {
 		"msg":  "刷新成功",
 		"data": result,
 	})
+}
+
+// ReinstallContainer 重装容器系统
+// @Summary 重装容器系统
+// @Description 重装指定容器的操作系统
+// @Tags 容器管理
+// @Accept json
+// @Produce json
+// @Param name path string true "容器名称"
+// @Param body body object true "重装参数"
+// @Success 200 {object} map[string]interface{} "重装成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/containers/{name}/reinstall [post]
+func ReinstallContainer(c *gin.Context) {
+	name := c.Param("name")
+	
+	var req struct {
+		NodeID       uint   `json:"node_id" binding:"required"`
+		Image        string `json:"image" binding:"required"`
+		Password     string `json:"password" binding:"required"`
+		CPUs         int    `json:"cpus"`
+		Memory       string `json:"memory"`
+		Disk         string `json:"disk"`
+		Ingress      string `json:"ingress"`
+		Egress       string `json:"egress"`
+		TrafficLimit int    `json:"traffic_limit"`
+		AllowNesting bool   `json:"allow_nesting"`
+		MemorySwap   bool   `json:"memory_swap"`
+		MaxProcesses int    `json:"max_processes"`
+		CPUAllowance string `json:"cpu_allowance"`
+		DiskIOLimit  string `json:"disk_io_limit"`
+		Privileged   bool   `json:"privileged"`
+		EnableLXCFS  bool   `json:"enable_lxcfs"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	var node models.Node
+	if err := database.DB.First(&node, req.NodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+		})
+		return
+	}
+
+	reinstallData := map[string]interface{}{
+		"hostname":      name,
+		"system":        req.Image,
+		"password":      req.Password,
+		"cpus":          req.CPUs,
+		"memory":        req.Memory,
+		"disk":          req.Disk,
+		"ingress":       req.Ingress,
+		"egress":        req.Egress,
+		"traffic_limit": req.TrafficLimit,
+		"allow_nesting": req.AllowNesting,
+		"memory_swap":   req.MemorySwap,
+		"max_processes": req.MaxProcesses,
+		"cpu_allowance": req.CPUAllowance,
+		"privileged":    req.Privileged,
+		"enable_lxcfs":  req.EnableLXCFS,
+	}
+	
+	if req.DiskIOLimit != "" {
+		reinstallData["disk_io_limit"] = req.DiskIOLimit
+	}
+
+	result := callNodeAPI(node, "POST", "/api/reinstall", reinstallData)
+	if result["code"] == float64(200) {
+		time.Sleep(2 * time.Second)
+		callNodeAPI(node, "GET", fmt.Sprintf("/api/info?hostname=%s", name), nil)
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ResetContainerPassword 重置容器密码
+// @Summary 重置容器密码
+// @Description 重置指定容器的root密码
+// @Tags 容器管理
+// @Accept json
+// @Produce json
+// @Param name path string true "容器名称"
+// @Param body body object true "密码参数"
+// @Success 200 {object} map[string]interface{} "重置成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/containers/{name}/password [post]
+func ResetContainerPassword(c *gin.Context) {
+	name := c.Param("name")
+	
+	var req struct {
+		NodeID   uint   `json:"node_id" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	var node models.Node
+	if err := database.DB.First(&node, req.NodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+		})
+		return
+	}
+
+	passwordData := map[string]interface{}{
+		"hostname": name,
+		"password": req.Password,
+	}
+
+	result := callNodeAPI(node, "POST", "/api/password", passwordData)
+	c.JSON(http.StatusOK, result)
+}
+
+// SuspendContainer 暂停容器
+// @Summary 暂停容器
+// @Description 暂停指定的容器（Frozen状态）
+// @Tags 容器管理
+// @Produce json
+// @Param name path string true "容器名称"
+// @Param node_id query string true "节点ID"
+// @Success 200 {object} map[string]interface{} "暂停成功"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/containers/{name}/suspend [post]
+func SuspendContainer(c *gin.Context) {
+	name := c.Param("name")
+	nodeID := c.Query("node_id")
+	
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+		})
+		return
+	}
+	
+	result := callNodeAPI(node, "GET", "/api/suspend?hostname="+name, nil)
+	if result["code"] == float64(200) {
+		time.Sleep(1 * time.Second)
+		callNodeAPI(node, "GET", fmt.Sprintf("/api/info?hostname=%s", name), nil)
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// UnsuspendContainer 恢复容器
+// @Summary 恢复容器
+// @Description 恢复被暂停的容器
+// @Tags 容器管理
+// @Produce json
+// @Param name path string true "容器名称"
+// @Param node_id query string true "节点ID"
+// @Success 200 {object} map[string]interface{} "恢复成功"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/containers/{name}/unsuspend [post]
+func UnsuspendContainer(c *gin.Context) {
+	name := c.Param("name")
+	nodeID := c.Query("node_id")
+	
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+		})
+		return
+	}
+	
+	result := callNodeAPI(node, "GET", "/api/unsuspend?hostname="+name, nil)
+	if result["code"] == float64(200) {
+		time.Sleep(1 * time.Second)
+		callNodeAPI(node, "GET", fmt.Sprintf("/api/info?hostname=%s", name), nil)
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ResetContainerTraffic 重置容器流量
+// @Summary 重置容器流量
+// @Description 重置指定容器的流量统计
+// @Tags 容器管理
+// @Produce json
+// @Param name path string true "容器名称"
+// @Param node_id query string true "节点ID"
+// @Success 200 {object} map[string]interface{} "重置成功"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/containers/{name}/traffic/reset [post]
+func ResetContainerTraffic(c *gin.Context) {
+	name := c.Param("name")
+	nodeID := c.Query("node_id")
+	
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+		})
+		return
+	}
+	
+	result := callNodeAPI(node, "POST", "/api/traffic/reset?hostname="+name, nil)
+	c.JSON(http.StatusOK, result)
 }
 // CreateContainer 创建容器
 // @Summary 创建容器

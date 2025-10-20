@@ -122,7 +122,7 @@ info:
     url: https://github.com/xkatld/zjmf-lxd-server/blob/main/LICENSE
   termsOfService: https://github.com/xkatld/zjmf-lxd-server
   title: LXD Web 管理平台
-  version: 1.0.1
+  version: 1.0.2
 paths:
   /:
     get:
@@ -315,6 +315,44 @@ paths:
       summary: 删除容器
       tags:
       - 容器管理
+  /api/containers/{name}/password:
+    post:
+      consumes:
+      - application/json
+      description: 重置指定容器的root密码
+      parameters:
+      - description: 容器名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 密码参数
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重置成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 重置容器密码
+      tags:
+      - 容器管理
   /api/containers/{name}/refresh:
     post:
       description: 实时获取指定容器的最新信息并更新缓存
@@ -343,6 +381,44 @@ paths:
             additionalProperties: true
             type: object
       summary: 刷新单个容器信息
+      tags:
+      - 容器管理
+  /api/containers/{name}/reinstall:
+    post:
+      consumes:
+      - application/json
+      description: 重装指定容器的操作系统
+      parameters:
+      - description: 容器名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 重装参数
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重装成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 重装容器系统
       tags:
       - 容器管理
   /api/containers/{name}/restart:
@@ -435,9 +511,104 @@ paths:
       summary: 停止容器
       tags:
       - 容器管理
+  /api/containers/{name}/suspend:
+    post:
+      description: 暂停指定的容器（Frozen状态）
+      parameters:
+      - description: 容器名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 节点ID
+        in: query
+        name: node_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 暂停成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 暂停容器
+      tags:
+      - 容器管理
+  /api/containers/{name}/traffic/reset:
+    post:
+      description: 重置指定容器的流量统计
+      parameters:
+      - description: 容器名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 节点ID
+        in: query
+        name: node_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重置成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 重置容器流量
+      tags:
+      - 容器管理
+  /api/containers/{name}/unsuspend:
+    post:
+      description: 恢复被暂停的容器
+      parameters:
+      - description: 容器名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 节点ID
+        in: query
+        name: node_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 恢复成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 恢复容器
+      tags:
+      - 容器管理
   /api/containers/cache:
     get:
-      description: 调用所有活跃节点的lxdapi /api/cache/containers接口快速获取容器信息
+      description: 从本地数据库缓存获取容器列表，支持按node_id筛选
+      parameters:
+      - description: 节点ID
+        in: query
+        name: node_id
+        type: string
       produces:
       - application/json
       responses:
@@ -451,7 +622,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: 从lxdapi缓存获取容器列表
+      summary: 从本地数据库缓存获取容器列表
       tags:
       - 容器管理
   /api/containers/create:
@@ -1008,6 +1179,51 @@ paths:
       summary: 从缓存获取NAT规则列表
       tags:
       - NAT管理
+  /api/nat/check:
+    get:
+      description: 检查指定端口和协议是否可用于NAT转发
+      parameters:
+      - description: 节点ID
+        in: query
+        name: node_id
+        required: true
+        type: string
+      - description: 容器名称
+        in: query
+        name: hostname
+        required: true
+        type: string
+      - description: 协议类型(tcp/udp)
+        in: query
+        name: protocol
+        required: true
+        type: string
+      - description: 端口号
+        in: query
+        name: port
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 检查结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 检查NAT端口是否可用
+      tags:
+      - NAT管理
   /api/nat/sync:
     post:
       description: 同步指定节点的NAT规则信息
@@ -1441,6 +1657,41 @@ paths:
       summary: 获取反向代理同步状态
       tags:
       - 反向代理管理
+  /api/proxy/check:
+    get:
+      description: 检查指定域名是否可用于反向代理配置
+      parameters:
+      - description: 节点ID
+        in: query
+        name: node_id
+        required: true
+        type: string
+      - description: 域名
+        in: query
+        name: domain
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 检查结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 节点不存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 检查反向代理域名是否可用
+      tags:
+      - 反向代理管理
   /api/sync/all:
     post:
       description: 启动所有活跃节点的容器信息同步任务
@@ -1606,6 +1857,25 @@ paths:
           schema:
             type: string
       summary: 节点管理页面
+      tags:
+      - 节点管理
+  /nodes/{id}:
+    get:
+      description: 显示单个节点的详细信息和管理界面
+      parameters:
+      - description: 节点ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML页面
+          schema:
+            type: string
+      summary: 节点详情页面
       tags:
       - 节点管理
   /proxy:

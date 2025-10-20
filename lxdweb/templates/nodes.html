@@ -175,10 +175,15 @@
                             </svg>
                             <span class="truncate font-mono">${node.address.replace(/^https?:\/\//, '')}</span>
                         </div>
-                        <div class="flex gap-1.5">
+                        <div class="flex gap-1.5 mb-2">
+                            <a href="/nodes/${node.id}" class="flex-1 px-2 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition text-center">
+                                详情
+                            </a>
                             <button onclick="testNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition" title="测试连接">
                                 测试
                             </button>
+                        </div>
+                        <div class="flex gap-1.5">
                             <button onclick="refreshNode(${node.id})" class="flex-1 px-2 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition" title="刷新节点信息">
                                 刷新
                             </button>
@@ -327,5 +332,7 @@
             });
         }
     </script>
+
+    {{template "footer.html" .}}
 </body>
 </html>

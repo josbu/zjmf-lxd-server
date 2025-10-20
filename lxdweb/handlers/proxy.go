@@ -388,6 +388,50 @@ func DeleteProxyConfig(c *gin.Context) {
 	})
 }
 
+// CheckProxyDomain 检查域名是否可用
+// @Summary 检查反向代理域名是否可用
+// @Description 检查指定域名是否可用于反向代理配置
+// @Tags 反向代理管理
+// @Produce json
+// @Param node_id query string true "节点ID"
+// @Param domain query string true "域名"
+// @Success 200 {object} map[string]interface{} "检查结果"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 404 {object} map[string]interface{} "节点不存在"
+// @Router /api/proxy/check [get]
+func CheckProxyDomain(c *gin.Context) {
+	nodeID := c.Query("node_id")
+	domain := c.Query("domain")
+
+	if nodeID == "" || domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "缺少必要参数",
+			"data": map[string]interface{}{
+				"available": false,
+				"reason":    "缺少必要参数",
+			},
+		})
+		return
+	}
+
+	var node models.Node
+	if err := database.DB.First(&node, nodeID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "节点不存在",
+			"data": map[string]interface{}{
+				"available": false,
+				"reason":    "节点不存在",
+			},
+		})
+		return
+	}
+
+	result := callNodeAPIForProxyMgmt(node, "GET", "/api/proxy/check?domain="+domain, nil)
+	c.JSON(http.StatusOK, result)
+}
+
 func callNodeAPIForProxyMgmt(node models.Node, method, path string, data interface{}) map[string]interface{} {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
