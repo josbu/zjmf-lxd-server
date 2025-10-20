@@ -23,7 +23,7 @@ err() { log "${RED}[ERR]${NC} $1"; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -v|--version) VERSION="$2"; [[ $VERSION != v* ]] && VERSION="v$VERSION"; shift 2;;
+    -v|--version) VERSION="$2"; shift 2;;
     -f|--force) FORCE=true; shift;;
     -d|--delete) DELETE=true; shift;;
     -h|--help) echo "$0 -v 版本 [-f] [-d]"; exit 0;;
