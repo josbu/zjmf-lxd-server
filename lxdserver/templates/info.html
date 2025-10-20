@@ -318,8 +318,15 @@ function initCharts() {
                 x: { display: false },
                 y: {
                     beginAtZero: true,
+                    max: 100,
                     grid: { color: '#f0f0f0' },
-                    ticks: { color: '#999', font: { size: 9 } }
+                    ticks: { 
+                        color: '#999', 
+                        font: { size: 9 },
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
                 }
             },
             elements: {
@@ -437,9 +444,9 @@ function loadAllInfoData(containerId) {
 
 function updateAllInfo(data) {
     const cpuUsage = data.cpu_usage || 0;
-    const cpuCores = data.cpus || 'N/A';
+    const cpuCores = data.cpus || 1;
     const cpuUsageFormatted = parseFloat(cpuUsage).toFixed(1);
-    $('#cpu-info').text(`${cpuUsageFormatted}% (${cpuCores} Core)`);
+    $('#cpu-info').text(`${cpuUsageFormatted}% / ${cpuCores}核`);
     updateChart(cpuChart, parseFloat(cpuUsage));
 
     const memoryUsage = data.memory_usage || 'N/A';
@@ -479,10 +486,10 @@ function updateAllInfo(data) {
     if (trafficLimit > 0) {
         const trafficLimitGB = trafficLimit;
         const trafficUsageGB = (trafficUsageRaw / (1024 * 1024 * 1024)).toFixed(2);
-        const trafficPercent = Math.min((parseFloat(trafficUsageGB) / trafficLimitGB) * 100, 100);
+        const trafficPercent = Math.min((parseFloat(trafficUsageGB) / trafficLimitGB) * 100, 100).toFixed(1);
         
         $('#traffic-info').text(`${trafficUsageGB} GB / ${trafficLimitGB} GB`);
-        updateChart(trafficChart, parseFloat(trafficUsageGB));
+        updateChart(trafficChart, parseFloat(trafficPercent));
     } else {
         $('#traffic-info').text(`累计: ${trafficUsage}`);
         updateChart(trafficChart, 0);
