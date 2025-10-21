@@ -65,8 +65,9 @@ echo
 
 info "检测操作系统..."
 if [[ -f /etc/os-release ]]; then
-  source /etc/os-release
-  echo "  系统: $NAME ${VERSION_ID:-}"
+  OS_NAME=$(grep '^NAME=' /etc/os-release | cut -d'"' -f2)
+  OS_VERSION=$(grep '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+  echo "  系统: $OS_NAME ${OS_VERSION:-}"
 else
   echo "  系统: 未知 Linux 发行版"
 fi
@@ -146,11 +147,15 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
   CUR=$(cat "$DIR/version")
   if [[ $CUR != "$VERSION" || $FORCE == true ]]; then
     UPGRADE=true
-    info "升级: $CUR -> $VERSION"
+    info "检测到已安装版本: $CUR"
+    info "执行升级操作: $CUR -> $VERSION"
   else
     ok "已是最新版本 $VERSION"
     exit 0
   fi
+else
+  info "未检测到已安装版本"
+  info "执行全新安装: $VERSION"
 fi
 
 echo
@@ -239,27 +244,28 @@ echo "      步骤 5/8: 准备环境"
 echo "========================================"
 echo
 
-info "停止当前服务..."
-systemctl stop $NAME 2>/dev/null || true
+if systemctl is-active --quiet $NAME 2>/dev/null; then
+  info "停止当前服务..."
+  systemctl stop $NAME 2>/dev/null || true
+  ok "服务已停止"
+else
+  info "服务未运行，跳过停止操作"
+fi
 
-TMP_DB=$(mktemp -d)
 if [[ $UPGRADE == true ]]; then
-  if [[ -f "$DIR/$DB_FILE" ]]; then
-    info "备份数据库..."
-    cp "$DIR/$DB_FILE" "$TMP_DB/"
-    [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$TMP_DB/" 
-    [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$TMP_DB/"
-  fi
-  
-  info "清理旧文件..."
-  find "$DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  info "清理旧程序文件..."
+  find "$DIR" -maxdepth 1 -type f ! -name "$DB_FILE" ! -name "$DB_FILE-shm" ! -name "$DB_FILE-wal" -delete 2>/dev/null || true
   for subdir in "$DIR"/*; do
     if [[ -d "$subdir" ]]; then
       rm -rf "$subdir" 2>/dev/null || true
     fi
   done
+  ok "旧文件已清理（保留数据库）"
 fi
+
+info "创建安装目录..."
 mkdir -p "$DIR"
+ok "环境准备完成"
 
 echo
 echo "========================================"
@@ -270,6 +276,7 @@ echo
 info "下载 $NAME $VERSION..."
 TMP=$(mktemp -d)
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
+
 info "解压安装文件..."
 unzip -qo "$TMP/app.zip" -d "$DIR"
 chmod +x "$DIR/$BIN"
@@ -277,15 +284,6 @@ echo "$VERSION" > "$DIR/version"
 rm -rf "$TMP"
 
 ok "程序文件安装完成"
-
-if [[ -f "$TMP_DB/$DB_FILE" ]]; then
-  info "恢复数据库..."
-  mv "$TMP_DB/$DB_FILE" "$DIR/"
-  [[ -f "$TMP_DB/$DB_FILE-shm" ]] && mv "$TMP_DB/$DB_FILE-shm" "$DIR/"
-  [[ -f "$TMP_DB/$DB_FILE-wal" ]] && mv "$TMP_DB/$DB_FILE-wal" "$DIR/"
-  ok "数据库已恢复"
-fi
-rm -rf "$TMP_DB"
 
 get_default_interface() {
   ip route | grep default | head -1 | awk '{print $5}' || echo "eth0"
