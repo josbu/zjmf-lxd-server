@@ -108,16 +108,18 @@ if [[ $INSTALL_MODE == "1" ]]; then
   echo
   
   info "检测系统架构..."
-  arch=$(uname -m)
-  case $arch in
+  sys_arch=$(uname -m)
+  case $sys_arch in
     x86_64) 
+      arch="amd64"
       info "检测到架构: x86_64 (amd64)"
       ;;
     aarch64|arm64) 
-      info "检测到架构: aarch64 (arm64)"
+      arch="arm64"
+      info "检测到架构: $sys_arch (arm64)"
       ;;
     *) 
-      err "不支持的架构: $arch，仅支持 amd64 和 arm64"
+      err "不支持的架构: $sys_arch，仅支持 amd64 和 arm64"
       ;;
   esac
   
@@ -374,18 +376,20 @@ echo "========================================"
 echo
 
 info "检测系统架构..."
-arch=$(uname -m)
-case $arch in
+sys_arch=$(uname -m)
+case $sys_arch in
   x86_64) 
+    arch="amd64"
     BIN="lxdimages-amd64"
     info "检测到架构: x86_64 (amd64)"
     ;;
   aarch64|arm64) 
+    arch="arm64"
     BIN="lxdimages-arm64"
-    info "检测到架构: aarch64 (arm64)"
+    info "检测到架构: $sys_arch (arm64)"
     ;;
   *) 
-    err "不支持的架构: $arch，仅支持 amd64 和 arm64"
+    err "不支持的架构: $sys_arch，仅支持 amd64 和 arm64"
     ;;
 esac
 
@@ -517,8 +521,8 @@ elif "$INSTALL_DIR/$NAME" version 2>/dev/null; then
   :
 else
   echo "程序已安装，可以使用 $NAME 命令运行"
-  echo "详细教程: https://github.com/xkatld/zjmf-lxd-server/wiki"
 fi
 
 echo
 ok "$NAME 安装完成！"
+echo "详细教程: https://github.com/xkatld/zjmf-lxd-server/wiki"
