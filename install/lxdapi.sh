@@ -32,20 +32,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $DELETE == true ]]; then
-  echo "警告: 此操作将删除所有数据，包括数据库文件和备份！"
-  
-  if [[ -d "$DIR/backups" ]]; then
-    db_backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
-    nat_v4_count=$(ls "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | wc -l)
-    nat_v6_count=$(ls "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | wc -l)
-    
-    if [[ $db_backup_count -gt 0 ]] || [[ $nat_v4_count -gt 0 ]] || [[ $nat_v6_count -gt 0 ]]; then
-      echo "备份文件位置: $DIR/backups/"
-      [[ $db_backup_count -gt 0 ]] && echo "  - SQLite数据库备份: $db_backup_count 个"
-      [[ $nat_v4_count -gt 0 ]] && echo "  - NAT规则备份(IPv4): $nat_v4_count 个"
-      [[ $nat_v6_count -gt 0 ]] && echo "  - NAT规则备份(IPv6): $nat_v6_count 个"
-    fi
-  fi
+  echo "警告: 此操作将删除所有数据，包括数据库文件！"
   
   read -p "确定要继续吗? (y/N): " CONFIRM
   if [[ $CONFIRM != "y" && $CONFIRM != "Y" ]]; then
@@ -59,7 +46,7 @@ if [[ $DELETE == true ]]; then
   systemctl daemon-reload
   if [[ -d "$DIR" ]]; then
     rm -rf "$DIR"
-    ok "已强制删除 $NAME 服务和目录（包括所有备份）"
+    ok "已删除 $NAME 服务和目录"
   else
     ok "目录 $DIR 不存在，无需删除"
   fi
@@ -70,21 +57,87 @@ if [[ -z "$VERSION" ]]; then
   err "必须提供版本号参数，使用 -v 或 --version 指定版本"
 fi
 
+echo
+echo "========================================"
+echo "      步骤 1/8: 检测系统环境"
+echo "========================================"
+echo
+
+info "检测操作系统..."
+if [[ -f /etc/os-release ]]; then
+  source /etc/os-release
+  echo "  系统: $NAME ${VERSION_ID:-}"
+else
+  echo "  系统: 未知 Linux 发行版"
+fi
+
+info "检测系统架构..."
 arch=$(uname -m)
 case $arch in
-  x86_64) BIN="lxdapi-amd64";;
-  aarch64|arm64) BIN="lxdapi-arm64";;
-  *) err "不支持的架构: $arch，仅支持 amd64 和 arm64";;
+  x86_64) 
+    BIN="lxdapi-amd64"
+    echo "  架构: amd64"
+    ;;
+  aarch64|arm64) 
+    BIN="lxdapi-arm64"
+    echo "  架构: arm64"
+    ;;
+  *) 
+    err "不支持的架构: $arch，仅支持 amd64 和 arm64"
+    ;;
 esac
 
+ok "系统环境检测完成"
+
+echo
+echo "========================================"
+echo "      步骤 2/8: 检查 LXD 环境"
+echo "========================================"
+echo
+
+info "检查 LXD 是否已安装..."
 if ! command -v lxd &> /dev/null; then
   err "未检测到 LXD，请先安装 LXD"
 fi
+ok "LXD 已安装"
 
-lxd_version=$(lxd --version 2>/dev/null | grep -oE '^[0-9]+')
-if [[ -z "$lxd_version" || "$lxd_version" -lt 5 ]]; then
-  err "LXD 版本必须 >= 5.0，当前版本: $(lxd --version)"
+info "检查 LXD 版本..."
+lxd_full_version=$(lxd --version 2>/dev/null)
+if [[ -z "$lxd_full_version" ]]; then
+  err "无法获取 LXD 版本信息"
 fi
+
+lxd_major=$(echo "$lxd_full_version" | grep -oE '^[0-9]+' | head -1)
+lxd_minor=$(echo "$lxd_full_version" | grep -oE '^[0-9]+\.[0-9]+' | cut -d. -f2)
+
+echo "  当前版本: $lxd_full_version"
+
+if [[ -z "$lxd_major" ]]; then
+  err "无法解析 LXD 版本号: $lxd_full_version"
+fi
+
+version_ok=false
+if [[ "$lxd_major" -ge 7 ]]; then
+  version_ok=true
+elif [[ "$lxd_major" -eq 6 ]]; then
+  version_ok=true
+elif [[ "$lxd_major" -eq 5 ]]; then
+  if [[ -n "$lxd_minor" ]] && [[ "$lxd_minor" -ge 21 ]]; then
+    version_ok=true
+  fi
+fi
+
+if [[ "$version_ok" != true ]]; then
+  err "LXD 版本必须 >= 5.21 或 >= 6.0，当前版本: $lxd_full_version"
+fi
+
+ok "LXD 版本检查通过 (版本: $lxd_full_version)"
+
+echo
+echo "========================================"
+echo "      步骤 3/8: 检查版本状态"
+echo "========================================"
+echo
 
 DOWNLOAD_URL="$REPO/releases/download/$VERSION/$BIN.zip"
 
@@ -100,10 +153,71 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
   fi
 fi
 
-apt update -y
-apt install -y curl wget unzip zip openssl xxd systemd iptables-persistent lxcfs || err "依赖安装失败"
+echo
+echo "========================================"
+echo "      步骤 4/8: 安装系统依赖"
+echo "========================================"
+echo
 
-# 启用并启动 LXCFS 服务
+info "检测包管理器..."
+pkg_manager=""
+if command -v apt &> /dev/null; then
+  pkg_manager="apt"
+  echo "  使用: APT (Debian/Ubuntu)"
+elif command -v dnf &> /dev/null; then
+  pkg_manager="dnf"
+  echo "  使用: DNF (Fedora/RHEL 8+)"
+elif command -v yum &> /dev/null; then
+  pkg_manager="yum"
+  echo "  使用: YUM (RHEL/CentOS)"
+elif command -v zypper &> /dev/null; then
+  pkg_manager="zypper"
+  echo "  使用: Zypper (openSUSE)"
+elif command -v pacman &> /dev/null; then
+  pkg_manager="pacman"
+  echo "  使用: Pacman (Arch Linux)"
+else
+  err "未检测到支持的包管理器"
+fi
+
+info "更新软件包列表..."
+case $pkg_manager in
+  apt)
+    apt update -y
+    ;;
+  dnf)
+    dnf check-update -y || true
+    ;;
+  yum)
+    yum check-update -y || true
+    ;;
+  zypper)
+    zypper refresh
+    ;;
+  pacman)
+    pacman -Sy --noconfirm
+    ;;
+esac
+
+info "安装依赖包..."
+case $pkg_manager in
+  apt)
+    apt install -y curl wget unzip zip openssl xxd systemd iptables-persistent lxcfs || err "依赖安装失败"
+    ;;
+  dnf)
+    dnf install -y curl wget unzip zip openssl xxd systemd iptables-services lxcfs || warn "部分依赖安装失败"
+    ;;
+  yum)
+    yum install -y curl wget unzip zip openssl xxd systemd iptables-services lxcfs || warn "部分依赖安装失败"
+    ;;
+  zypper)
+    zypper install -y curl wget unzip zip openssl xxd systemd iptables lxcfs || warn "部分依赖安装失败"
+    ;;
+  pacman)
+    pacman -S --noconfirm curl wget unzip zip openssl xxd systemd iptables lxcfs || warn "部分依赖安装失败"
+    ;;
+esac
+
 if command -v lxcfs &> /dev/null; then
   systemctl enable lxcfs 2>/dev/null || true
   systemctl start lxcfs 2>/dev/null || true
@@ -114,204 +228,62 @@ if command -v lxcfs &> /dev/null; then
     warn "LXCFS 已安装但服务未运行，容器资源视图功能可能不可用"
   fi
 else
-  warn "LXCFS 安装失败，容器资源视图功能将不可用"
+  warn "LXCFS 未安装，容器资源视图功能将不可用"
 fi
 
+ok "系统依赖安装完成"
+
+echo
+echo "========================================"
+echo "      步骤 5/8: 准备环境"
+echo "========================================"
+echo
+
+info "停止当前服务..."
 systemctl stop $NAME 2>/dev/null || true
-
-backup_nat_rules() {
-  local backup_dir="$DIR/backups"
-  local timestamp=$(date +"%Y%m%d_%H%M%S")
-  
-  mkdir -p "$backup_dir" || {
-    warn "创建备份目录失败: $backup_dir"
-    return 1
-  }
-  
-  local has_backup=false
-  
-  if [[ -f "/etc/iptables/rules.v4" ]]; then
-    cp "/etc/iptables/rules.v4" "$backup_dir/iptables_rules_v4_${timestamp}" 2>/dev/null && has_backup=true
-  fi
-  
-  if [[ -f "/etc/iptables/rules.v6" ]]; then
-    cp "/etc/iptables/rules.v6" "$backup_dir/iptables_rules_v6_${timestamp}" 2>/dev/null && has_backup=true
-  fi
-  
-  if [[ $has_backup == true ]]; then
-    ok "NAT规则已备份 (iptables持久化文件)"
-    
-    local old_v4_backups=($(ls -t "$backup_dir"/iptables_rules_v4_* 2>/dev/null))
-    if [[ ${#old_v4_backups[@]} -gt 2 ]]; then
-      for ((i=2; i<${#old_v4_backups[@]}; i++)); do
-        rm -f "${old_v4_backups[$i]}" 2>/dev/null
-      done
-    fi
-    
-    local old_v6_backups=($(ls -t "$backup_dir"/iptables_rules_v6_* 2>/dev/null))
-    if [[ ${#old_v6_backups[@]} -gt 2 ]]; then
-      for ((i=2; i<${#old_v6_backups[@]}; i++)); do
-        rm -f "${old_v6_backups[$i]}" 2>/dev/null
-      done
-    fi
-    
-    return 0
-  else
-    info "未找到 iptables 持久化文件，跳过 NAT 规则备份"
-    return 1
-  fi
-}
-
-backup_database() {
-  local backup_dir="$DIR/backups"
-  local timestamp=$(date +"%Y%m%d_%H%M%S")
-  local backup_name="lxdapi_backup_${timestamp}"
-  
-  if [[ ! -f "$DIR/$DB_FILE" ]]; then
-    info "SQLite数据库文件不存在，跳过数据库备份"
-    return 1
-  fi
-  
-  if ! command -v zip &> /dev/null; then
-    warn "zip 命令未安装，跳过数据库备份"
-    return 1
-  fi
-  
-  mkdir -p "$backup_dir" || {
-    warn "创建备份目录失败: $backup_dir"
-    return 1
-  }
-  
-  local temp_backup_dir=$(mktemp -d)
-  
-  if ! cp "$DIR/$DB_FILE" "$temp_backup_dir/"; then
-    warn "复制数据库文件失败"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$temp_backup_dir/" 2>/dev/null
-  [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$temp_backup_dir/" 2>/dev/null
-  
-  local current_dir=$(pwd)
-  cd "$temp_backup_dir" || {
-    warn "切换到临时目录失败"
-    rm -rf "$temp_backup_dir"
-    return 1
-  }
-  
-  if ! zip -q "${backup_name}.zip" * 2>/dev/null; then
-    warn "压缩数据库文件失败"
-    cd "$current_dir"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  if ! mv "${backup_name}.zip" "$backup_dir/"; then
-    warn "移动备份文件失败"
-    cd "$current_dir"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  cd "$current_dir"
-  rm -rf "$temp_backup_dir"
-  
-  if [[ -f "$backup_dir/${backup_name}.zip" ]]; then
-    local backup_size=$(du -h "$backup_dir/${backup_name}.zip" 2>/dev/null | cut -f1)
-    ok "SQLite数据库已备份: ${backup_name}.zip (大小: $backup_size)"
-    
-    local old_backups=($(ls -t "$backup_dir"/lxdapi_backup_*.zip 2>/dev/null))
-    if [[ ${#old_backups[@]} -gt 2 ]]; then
-      for ((i=2; i<${#old_backups[@]}; i++)); do
-        rm -f "${old_backups[$i]}" 2>/dev/null
-        info "清理旧数据库备份: $(basename "${old_backups[$i]}")"
-      done
-    fi
-    
-    return 0
-  fi
-  
-  warn "备份文件未找到，数据库备份可能失败"
-  return 1
-}
-
-check_db_backup_warning() {
-  if [[ -f "$CFG" ]]; then
-    local current_db_type=$(grep -E "^\s*type:" "$CFG" 2>/dev/null | sed 's/.*type:\s*["\x27]*\([^"\x27]*\)["\x27]*.*/\1/' | tr -d ' ')
-    if [[ "$current_db_type" == "mysql" || "$current_db_type" == "mariadb" || "$current_db_type" == "postgres" ]]; then
-      echo
-      warn "$current_db_type 数据库需要您自行备份，请注意数据安全"
-      echo
-      read -p "确认继续升级? (y/N): " DB_UPGRADE_CONFIRM
-      if [[ $DB_UPGRADE_CONFIRM != "y" && $DB_UPGRADE_CONFIRM != "Y" ]]; then
-        echo "已取消升级，请先备份数据库"
-        exit 0
-      fi
-    fi
-  fi
-}
-
-mkdir -p "$DIR/backups"
 
 TMP_DB=$(mktemp -d)
 if [[ $UPGRADE == true ]]; then
-  check_db_backup_warning
-  
-  backup_nat_rules
-  backup_database
-  
   if [[ -f "$DIR/$DB_FILE" ]]; then
-    cp "$DIR/$DB_FILE" "$TMP_DB/" && info "临时备份已创建"
+    info "备份数据库..."
+    cp "$DIR/$DB_FILE" "$TMP_DB/"
     [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$TMP_DB/" 
     [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$TMP_DB/"
   fi
   
-  info "清理旧文件（保留 backups 目录和备份文件）"
-  find "$DIR" -maxdepth 1 -type f ! -name "lxdapi_backup_*.zip" ! -name "iptables_rules_*" -delete 2>/dev/null || true
+  info "清理旧文件..."
+  find "$DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
   for subdir in "$DIR"/*; do
-    if [[ -d "$subdir" ]] && [[ "$(basename "$subdir")" != "backups" ]]; then
+    if [[ -d "$subdir" ]]; then
       rm -rf "$subdir" 2>/dev/null || true
     fi
   done
-elif [[ -d "$DIR" ]]; then
-  backup_nat_rules
-  backup_database
 fi
 mkdir -p "$DIR"
 
+echo
+echo "========================================"
+echo "      步骤 6/8: 下载和安装程序"
+echo "========================================"
+echo
+
+info "下载 $NAME $VERSION..."
 TMP=$(mktemp -d)
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
+info "解压安装文件..."
 unzip -qo "$TMP/app.zip" -d "$DIR"
 chmod +x "$DIR/$BIN"
 echo "$VERSION" > "$DIR/version"
 rm -rf "$TMP"
 
+ok "程序文件安装完成"
+
 if [[ -f "$TMP_DB/$DB_FILE" ]]; then
+  info "恢复数据库..."
   mv "$TMP_DB/$DB_FILE" "$DIR/"
   [[ -f "$TMP_DB/$DB_FILE-shm" ]] && mv "$TMP_DB/$DB_FILE-shm" "$DIR/"
   [[ -f "$TMP_DB/$DB_FILE-wal" ]] && mv "$TMP_DB/$DB_FILE-wal" "$DIR/"
   ok "数据库已恢复"
-else
-  backup_dir="$DIR/backups"
-  if [[ -d "$backup_dir" ]]; then
-    latest_backup=$(ls -t "$backup_dir"/lxdapi_backup_*.zip 2>/dev/null | head -1)
-    if [[ -n "$latest_backup" ]]; then
-      local temp_restore_dir=$(mktemp -d)
-      
-      if unzip -q "$latest_backup" -d "$temp_restore_dir"; then
-        [[ -f "$temp_restore_dir/$DB_FILE" ]] && cp "$temp_restore_dir/$DB_FILE" "$DIR/"
-        [[ -f "$temp_restore_dir/$DB_FILE-shm" ]] && cp "$temp_restore_dir/$DB_FILE-shm" "$DIR/"
-        [[ -f "$temp_restore_dir/$DB_FILE-wal" ]] && cp "$temp_restore_dir/$DB_FILE-wal" "$DIR/"
-        
-        ok "从压缩备份恢复数据库: $(basename "$latest_backup")"
-      else
-        warn "解压备份文件失败: $(basename "$latest_backup")"
-      fi
-      
-      rm -rf "$temp_restore_dir"
-    fi
-  fi
 fi
 rm -rf "$TMP_DB"
 
@@ -338,8 +310,10 @@ DEFAULT_PORT="8080"
 
 echo
 echo "========================================"
-echo "    LXD API 服务配置向导 - $VERSION"
+echo "      步骤 7/8: 配置向导"
 echo "========================================"
+echo
+echo "    LXD API 服务配置向导 - $VERSION"
 echo
 
 echo "==== 步骤 1/6: 基础信息配置 ===="
@@ -833,8 +807,12 @@ else
 fi
 
 echo
+echo "========================================"
+echo "      步骤 8/8: 生成配置和启动服务"
+echo "========================================"
+echo
 
-echo "==== 正在生成配置文件 ===="
+info "正在生成配置文件..."
 
 replace_config_var() {
   local placeholder="$1"
@@ -918,9 +896,8 @@ replace_config_var "TRAFFIC_AUTO_RESET_BATCH_SIZE" "$TRAFFIC_AUTO_RESET_BATCH_SI
 replace_config_var "NGINX_PROXY_ENABLED" "$NGINX_PROXY_ENABLED"
 
 ok "配置文件已生成"
-echo
 
-echo "==== 创建系统服务 ===="
+info "创建系统服务..."
 
 cat > "$SERVICE" <<EOF
 [Unit]
@@ -938,10 +915,12 @@ Environment=GIN_MODE=release
 WantedBy=multi-user.target
 EOF
 
+info "启动服务..."
 systemctl daemon-reload
 systemctl enable --now $NAME
 
 ok "系统服务已创建并启动"
+
 echo
 
 echo "========================================"
@@ -1017,36 +996,10 @@ else
 fi
 echo
 
-if [[ -d "$DIR/backups" ]]; then
-  db_backup_count=$(ls "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | wc -l)
-  nat_v4_count=$(ls "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | wc -l)
-  nat_v6_count=$(ls "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | wc -l)
-  
-  if [[ $db_backup_count -gt 0 ]] || [[ $nat_v4_count -gt 0 ]] || [[ $nat_v6_count -gt 0 ]]; then
-    echo "备份信息:"
-    
-    if [[ $db_backup_count -gt 0 ]]; then
-      latest_db_backup=$(ls -t "$DIR/backups"/lxdapi_backup_*.zip 2>/dev/null | head -1)
-      db_backup_size=$(du -h "$latest_db_backup" 2>/dev/null | cut -f1)
-      echo "  SQLite数据库: $db_backup_count 个 (最新: $(basename "$latest_db_backup"), 大小: $db_backup_size)"
-    fi
-    
-    if [[ $nat_v4_count -gt 0 ]]; then
-      latest_nat_v4=$(ls -t "$DIR/backups"/iptables_rules_v4_* 2>/dev/null | head -1)
-      nat_v4_size=$(du -h "$latest_nat_v4" 2>/dev/null | cut -f1)
-      echo "  NAT规则(IPv4): $nat_v4_count 个 (最新: $(basename "$latest_nat_v4"), 大小: $nat_v4_size)"
-    fi
-    
-    if [[ $nat_v6_count -gt 0 ]]; then
-      latest_nat_v6=$(ls -t "$DIR/backups"/iptables_rules_v6_* 2>/dev/null | head -1)
-      nat_v6_size=$(du -h "$latest_nat_v6" 2>/dev/null | cut -f1)
-      echo "  NAT规则(IPv6): $nat_v6_count 个 (最新: $(basename "$latest_nat_v6"), 大小: $nat_v6_size)"
-    fi
-    
-    echo
-  fi
-fi
+info "等待服务稳定..."
+sleep 3
 
+echo
 echo "========================================"
 echo "服务状态:"
 echo "========================================"
