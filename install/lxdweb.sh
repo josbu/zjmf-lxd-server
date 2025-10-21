@@ -32,15 +32,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $DELETE == true ]]; then
-  echo "警告: 此操作将删除所有数据，包括数据库文件和备份！"
-  
-  if [[ -d "$DIR/backups" ]]; then
-    backup_count=$(ls "$DIR/backups"/lxdweb_backup_*.zip 2>/dev/null | wc -l)
-    if [[ $backup_count -gt 0 ]]; then
-      echo "发现 $backup_count 个数据库备份文件将被删除"
-      echo "备份文件位置: $DIR/backups/"
-    fi
-  fi
+  echo "警告: 此操作将删除所有数据，包括数据库文件！"
   
   read -p "确定要继续吗? (y/N): " CONFIRM
   if [[ $CONFIRM != "y" && $CONFIRM != "Y" ]]; then
@@ -61,7 +53,7 @@ if [[ $DELETE == true ]]; then
   
   if [[ -d "$DIR" ]]; then
     rm -rf "$DIR"
-    ok "已强制删除 $NAME 服务和目录（包括所有备份）"
+    ok "已删除 $NAME 服务和目录"
   else
     ok "目录 $DIR 不存在，无需删除"
   fi
@@ -72,12 +64,44 @@ if [[ -z "$VERSION" ]]; then
   err "必须提供版本号参数，使用 -v 或 --version 指定版本"
 fi
 
+echo
+echo "========================================"
+echo "      步骤 1/6: 检测系统环境"
+echo "========================================"
+echo
+
+info "检测操作系统..."
+if [[ -f /etc/os-release ]]; then
+  OS_NAME=$(grep '^NAME=' /etc/os-release | cut -d'"' -f2)
+  OS_VERSION=$(grep '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+  echo "  系统: $OS_NAME ${OS_VERSION:-}"
+else
+  echo "  系统: 未知 Linux 发行版"
+fi
+
+info "检测系统架构..."
 arch=$(uname -m)
 case $arch in
-  x86_64) BIN="lxdweb-amd64";;
-  aarch64|arm64) BIN="lxdweb-arm64";;
-  *) err "不支持的架构: $arch，仅支持 amd64 和 arm64";;
+  x86_64) 
+    BIN="lxdweb-amd64"
+    echo "  架构: amd64"
+    ;;
+  aarch64|arm64) 
+    BIN="lxdweb-arm64"
+    echo "  架构: arm64"
+    ;;
+  *) 
+    err "不支持的架构: $arch，仅支持 amd64 和 arm64"
+    ;;
 esac
+
+ok "系统环境检测完成"
+
+echo
+echo "========================================"
+echo "      步骤 2/6: 检查版本状态"
+echo "========================================"
+echo
 
 DOWNLOAD_URL="$REPO/releases/download/$VERSION/$BIN.zip"
 
@@ -86,159 +110,143 @@ if [[ -d "$DIR" ]] && [[ -f "$DIR/version" ]]; then
   CUR=$(cat "$DIR/version")
   if [[ $CUR != "$VERSION" || $FORCE == true ]]; then
     UPGRADE=true
-    info "升级: $CUR -> $VERSION"
+    info "检测到已安装版本: $CUR"
+    info "执行升级操作: $CUR -> $VERSION"
   else
     ok "已是最新版本 $VERSION"
     exit 0
   fi
+else
+  info "未检测到已安装版本"
+  info "执行全新安装: $VERSION"
 fi
 
-apt update -y
-apt install -y curl wget unzip zip openssl systemd || err "依赖安装失败"
+echo
+echo "========================================"
+echo "      步骤 3/6: 安装系统依赖"
+echo "========================================"
+echo
 
-systemctl stop $NAME 2>/dev/null || true
+info "检测包管理器..."
+pkg_manager=""
+if command -v apt &> /dev/null; then
+  pkg_manager="apt"
+  echo "  使用: APT (Debian/Ubuntu)"
+elif command -v dnf &> /dev/null; then
+  pkg_manager="dnf"
+  echo "  使用: DNF (Fedora/RHEL 8+)"
+elif command -v yum &> /dev/null; then
+  pkg_manager="yum"
+  echo "  使用: YUM (RHEL/CentOS)"
+elif command -v zypper &> /dev/null; then
+  pkg_manager="zypper"
+  echo "  使用: Zypper (openSUSE)"
+elif command -v pacman &> /dev/null; then
+  pkg_manager="pacman"
+  echo "  使用: Pacman (Arch Linux)"
+else
+  err "未检测到支持的包管理器"
+fi
 
-backup_database() {
-  local backup_dir="$DIR/backups"
-  local timestamp=$(date +"%Y%m%d_%H%M%S")
-  local backup_name="lxdweb_backup_${timestamp}"
-  
-  if [[ ! -f "$DIR/$DB_FILE" ]]; then
-    info "SQLite数据库文件不存在，跳过数据库备份"
-    return 1
-  fi
-  
-  if ! command -v zip &> /dev/null; then
-    warn "zip 命令未安装，跳过数据库备份"
-    return 1
-  fi
-  
-  mkdir -p "$backup_dir" || {
-    warn "创建备份目录失败: $backup_dir"
-    return 1
-  }
-  
-  local temp_backup_dir=$(mktemp -d)
-  
-  if ! cp "$DIR/$DB_FILE" "$temp_backup_dir/"; then
-    warn "复制数据库文件失败"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$temp_backup_dir/" 2>/dev/null
-  [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$temp_backup_dir/" 2>/dev/null
-  
-  local current_dir=$(pwd)
-  cd "$temp_backup_dir" || {
-    warn "切换到临时目录失败"
-    rm -rf "$temp_backup_dir"
-    return 1
-  }
-  
-  if ! zip -q "${backup_name}.zip" * 2>/dev/null; then
-    warn "压缩数据库文件失败"
-    cd "$current_dir"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  if ! mv "${backup_name}.zip" "$backup_dir/"; then
-    warn "移动备份文件失败"
-    cd "$current_dir"
-    rm -rf "$temp_backup_dir"
-    return 1
-  fi
-  
-  cd "$current_dir"
-  rm -rf "$temp_backup_dir"
-  
-  if [[ -f "$backup_dir/${backup_name}.zip" ]]; then
-    local backup_size=$(du -h "$backup_dir/${backup_name}.zip" 2>/dev/null | cut -f1)
-    ok "SQLite数据库已备份: ${backup_name}.zip (大小: $backup_size)"
-    
-    local old_backups=($(ls -t "$backup_dir"/lxdweb_backup_*.zip 2>/dev/null))
-    if [[ ${#old_backups[@]} -gt 2 ]]; then
-      for ((i=2; i<${#old_backups[@]}; i++)); do
-        rm -f "${old_backups[$i]}" 2>/dev/null
-        info "清理旧数据库备份: $(basename "${old_backups[$i]}")"
-      done
-    fi
-    
-    return 0
-  fi
-  
-  warn "备份文件未找到，数据库备份可能失败"
-  return 1
-}
+info "更新软件包列表..."
+case $pkg_manager in
+  apt)
+    apt update -y
+    ;;
+  dnf)
+    dnf check-update -y || true
+    ;;
+  yum)
+    yum check-update -y || true
+    ;;
+  zypper)
+    zypper refresh
+    ;;
+  pacman)
+    pacman -Sy --noconfirm
+    ;;
+esac
 
-TMP_DB=$(mktemp -d)
-[[ -z "$TMP_DB" || ! -d "$TMP_DB" ]] && err "创建临时目录失败"
+info "安装依赖包..."
+case $pkg_manager in
+  apt)
+    apt install -y curl wget unzip zip openssl systemd || err "依赖安装失败"
+    ;;
+  dnf)
+    dnf install -y curl wget unzip zip openssl systemd || err "依赖安装失败"
+    ;;
+  yum)
+    yum install -y curl wget unzip zip openssl systemd || err "依赖安装失败"
+    ;;
+  zypper)
+    zypper install -y curl wget unzip zip openssl systemd || err "依赖安装失败"
+    ;;
+  pacman)
+    pacman -S --noconfirm curl wget unzip zip openssl systemd || err "依赖安装失败"
+    ;;
+esac
+
+ok "系统依赖安装完成"
+
+echo
+echo "========================================"
+echo "      步骤 4/6: 准备环境"
+echo "========================================"
+echo
+
+if systemctl is-active --quiet $NAME 2>/dev/null; then
+  info "停止当前服务..."
+  systemctl stop $NAME 2>/dev/null || true
+  ok "服务已停止"
+else
+  info "服务未运行，跳过停止操作"
+fi
 
 if [[ $UPGRADE == true ]]; then
-  backup_database
-  
-  if [[ -f "$DIR/$DB_FILE" ]]; then
-    cp "$DIR/$DB_FILE" "$TMP_DB/" && info "临时备份已创建"
-    [[ -f "$DIR/$DB_FILE-shm" ]] && cp "$DIR/$DB_FILE-shm" "$TMP_DB/" 
-    [[ -f "$DIR/$DB_FILE-wal" ]] && cp "$DIR/$DB_FILE-wal" "$TMP_DB/"
-  fi
-  
-  info "清理旧文件（保留 backups 目录和备份文件）"
-  find "$DIR" -maxdepth 1 -type f ! -name "lxdweb_backup_*.zip" -delete 2>/dev/null || true
+  info "清理旧程序文件..."
+  find "$DIR" -maxdepth 1 -type f ! -name "$DB_FILE" ! -name "$DB_FILE-shm" ! -name "$DB_FILE-wal" -delete 2>/dev/null || true
   for subdir in "$DIR"/*; do
-    if [[ -d "$subdir" ]] && [[ "$(basename "$subdir")" != "backups" ]]; then
+    if [[ -d "$subdir" ]]; then
       rm -rf "$subdir" 2>/dev/null || true
     fi
   done
-elif [[ -d "$DIR" ]]; then
-  backup_database
+  ok "旧文件已清理（保留数据库）"
 fi
+
+info "创建安装目录..."
 mkdir -p "$DIR"
-mkdir -p "$DIR/backups"
+ok "环境准备完成"
 
+echo
+echo "========================================"
+echo "      步骤 5/6: 下载和安装程序"
+echo "========================================"
+echo
+
+info "下载 $NAME $VERSION..."
 TMP=$(mktemp -d)
-[[ -z "$TMP" || ! -d "$TMP" ]] && err "创建下载临时目录失败"
-
 wget -qO "$TMP/app.zip" "$DOWNLOAD_URL" || err "下载失败"
+
+info "解压安装文件..."
 unzip -qo "$TMP/app.zip" -d "$DIR"
 chmod +x "$DIR/$BIN"
 echo "$VERSION" > "$DIR/version"
 rm -rf "$TMP"
 
-if [[ -f "$TMP_DB/$DB_FILE" ]]; then
-  mv "$TMP_DB/$DB_FILE" "$DIR/"
-  [[ -f "$TMP_DB/$DB_FILE-shm" ]] && mv "$TMP_DB/$DB_FILE-shm" "$DIR/"
-  [[ -f "$TMP_DB/$DB_FILE-wal" ]] && mv "$TMP_DB/$DB_FILE-wal" "$DIR/"
-  ok "数据库已恢复"
-else
-  backup_dir="$DIR/backups"
-  if [[ -d "$backup_dir" ]]; then
-    latest_backup=$(ls -t "$backup_dir"/lxdweb_backup_*.zip 2>/dev/null | head -1)
-    if [[ -n "$latest_backup" ]]; then
-      local temp_restore_dir=$(mktemp -d)
-      
-      if unzip -q "$latest_backup" -d "$temp_restore_dir"; then
-        [[ -f "$temp_restore_dir/$DB_FILE" ]] && cp "$temp_restore_dir/$DB_FILE" "$DIR/"
-        [[ -f "$temp_restore_dir/$DB_FILE-shm" ]] && cp "$temp_restore_dir/$DB_FILE-shm" "$DIR/"
-        [[ -f "$temp_restore_dir/$DB_FILE-wal" ]] && cp "$temp_restore_dir/$DB_FILE-wal" "$DIR/"
-        
-        ok "从压缩备份恢复数据库: $(basename "$latest_backup")"
-      else
-        warn "解压备份文件失败: $(basename "$latest_backup")"
-      fi
-      
-      rm -rf "$temp_restore_dir"
-    fi
-  fi
-fi
-rm -rf "$TMP_DB"
+ok "程序文件安装完成"
+
+echo
+echo "========================================"
+echo "      步骤 6/6: 生成配置和启动服务"
+echo "========================================"
+echo
 
 DEFAULT_PORT="3000"
 DEFAULT_SESSION_SECRET=$(openssl rand -hex 32)
 
 if [[ ! -f "$CFG" ]]; then
-  info "配置文件不存在，创建默认配置..."
+  info "配置文件不存在，开始配置向导..."
+  echo
   
   read -p "Web 界面端口 [$DEFAULT_PORT]: " WEB_PORT
   WEB_PORT=${WEB_PORT:-$DEFAULT_PORT}
@@ -246,6 +254,7 @@ if [[ ! -f "$CFG" ]]; then
   read -p "Session 密钥 [自动生成]: " SESSION_SECRET
   SESSION_SECRET=${SESSION_SECRET:-$DEFAULT_SESSION_SECRET}
   
+  info "生成配置文件..."
   cat > "$CFG" <<EOF
 server:
   # 服务器监听地址
@@ -281,11 +290,12 @@ logging:
   # 开发模式（控制台输出格式）
   dev_mode: false
 EOF
-  ok "配置文件已创建: $CFG (HTTPS已启用)"
+  ok "配置文件已创建 (HTTPS已启用)"
 else
-  info "配置文件已存在，跳过配置"
+  info "配置文件已存在，跳过配置向导"
 fi
 
+info "生成 systemd 服务文件..."
 cat > "$SERVICE" <<EOF
 [Unit]
 Description=lxdweb-xkatld
@@ -301,10 +311,9 @@ Environment=GIN_MODE=release
 [Install]
 WantedBy=multi-user.target
 EOF
+ok "服务文件已生成"
 
-systemctl daemon-reload
-systemctl enable --now $NAME
-
+info "创建全局命令..."
 WRAPPER="/usr/local/bin/lxdweb"
 cat > "$WRAPPER" <<'WRAPPER_EOF'
 #!/bin/bash
@@ -321,24 +330,25 @@ cd "$DIR" && exec "$BIN" "$@"
 WRAPPER_EOF
 
 chmod +x "$WRAPPER"
-ok "已创建全局命令: lxdweb"
+ok "全局命令已创建: lxdweb"
+
+info "启动服务..."
+systemctl daemon-reload
+systemctl enable --now $NAME
+ok "服务已启动"
+
+info "等待服务稳定..."
+sleep 3
 
 echo
-ok "安装/升级完成"
+echo "========================================"
+echo "          安装完成"
+echo "========================================"
+echo
 echo "数据目录: $DIR"
 echo "Web 端口: $(grep 'address:' $CFG | awk -F: '{print $NF}' | tr -d ' "')"
 echo "配置文件: $CFG"
 echo "数据库: SQLite ($DB_FILE)"
-
-if [[ -d "$DIR/backups" ]]; then
-    backup_count=$(ls "$DIR/backups"/lxdweb_backup_*.zip 2>/dev/null | wc -l)
-    if [[ $backup_count -gt 0 ]]; then
-        latest_backup=$(ls -t "$DIR/backups"/lxdweb_backup_*.zip 2>/dev/null | head -1)
-        backup_size=$(du -h "$latest_backup" 2>/dev/null | cut -f1)
-        echo "数据备份: $backup_count 个压缩备份 (最新: $(basename "$latest_backup"), 大小: $backup_size)"
-    fi
-fi
-
 echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "管理员账户管理命令 (服务后台运行时可用):"
@@ -349,6 +359,8 @@ echo "  lxdweb admin list            列出所有管理员"
 echo "  lxdweb admin delete          删除管理员"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
-echo "服务状态信息:"
+echo "========================================"
+echo "服务状态:"
+echo "========================================"
 systemctl status $NAME --no-pager
 
