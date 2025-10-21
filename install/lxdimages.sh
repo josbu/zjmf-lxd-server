@@ -356,8 +356,9 @@ if [[ $INSTALL_MODE == "1" ]]; then
   echo
   ok "容器模板导入完成！"
   echo
-  info "查看已导入的镜像："
-  echo "  lxc image list"
+  info "已导入的镜像列表："
+  echo
+  lxc image list
   echo
   
   exit 0
