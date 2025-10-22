@@ -143,8 +143,16 @@ if [[ $DELETE == true ]]; then
   rm -rf /etc/lxd 2>/dev/null || true
   rm -rf ~/.config/lxc 2>/dev/null || true
   
+  info "清理环境变量配置..."
+  if [[ -f /etc/profile.d/snap.sh ]]; then
+    rm -f /etc/profile.d/snap.sh
+    ok "已删除环境变量配置文件"
+  fi
+  
   echo
   ok "LXD 卸载完成！"
+  echo
+  warn "环境变量已清理，建议重新登录系统或重启终端"
   exit 0
 fi
 
@@ -317,7 +325,19 @@ info "启用 snapd 服务..."
 systemctl enable --now snapd || err "snapd 服务启用失败"
 systemctl enable --now snapd.socket 2>/dev/null || true
 
-info "更新环境变量..."
+info "配置系统环境变量..."
+if [[ ! -f /etc/profile.d/snap.sh ]]; then
+  cat > /etc/profile.d/snap.sh <<'EOF'
+# 添加 Snap 二进制文件目录到 PATH
+export PATH="/snap/bin:$PATH"
+EOF
+  chmod +x /etc/profile.d/snap.sh
+  ok "环境变量配置已写入 /etc/profile.d/snap.sh"
+else
+  info "环境变量配置已存在"
+fi
+
+info "更新当前会话环境变量..."
 export PATH="/snap/bin:$PATH"
 
 info "等待 snapd 服务就绪..."
@@ -344,7 +364,7 @@ mkdir -p /lib/modules 2>/dev/null || true
 info "安装 LXD (Snap)..."
 snap install lxd --channel=latest/stable || err "LXD 安装失败"
 
-info "更新环境变量..."
+info "更新当前会话环境变量..."
 export PATH="/snap/bin:$PATH"
 
 info "验证 LXD 安装..."
@@ -405,5 +425,10 @@ fi
 
 echo
 ok "LXD 安装并初始化完成！"
+echo
+warn "如果当前终端中 lxc/lxd 命令不可用，请执行以下命令之一："
+echo "  1. 重新登录系统"
+echo "  2. 执行: source /etc/profile.d/snap.sh"
+echo "  3. 执行: export PATH=\"/snap/bin:\$PATH\""
 echo
 ok "详细教程: https://github.com/xkatld/zjmf-lxd-server/wiki"
