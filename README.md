@@ -15,7 +15,7 @@
 ## 项目截图
 
 info页面
-<img width="1920" height="911" alt="image" src="https://github.com/user-attachments/assets/d994f4da-245f-4df5-96c3-0b3c8eded016" />
+<img width="1637" height="810" alt="image" src="https://github.com/user-attachments/assets/5001f198-57bd-44b0-8698-fe9d92a2a662" />
 
 nat页面
 <img width="1150" height="534" alt="image" src="https://github.com/user-attachments/assets/4ba28cc5-1d3d-45a8-9e1b-9ecb28294389" /><img width="518" height="593" alt="image" src="https://github.com/user-attachments/assets/9cc5e287-e275-4f6a-8813-e5d056c61f38" />
