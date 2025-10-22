@@ -123,6 +123,39 @@ if [[ $INSTALL_MODE == "1" ]]; then
       ;;
   esac
   
+  info "检查系统依赖..."
+  if ! command -v wget &> /dev/null; then
+    info "检测包管理器..."
+    PKG_MANAGER=""
+    if command -v apt-get &> /dev/null; then
+      PKG_MANAGER="apt"
+      info "使用 APT 安装 wget..."
+      apt-get update -y >/dev/null 2>&1
+      apt-get install -y wget || err "wget 安装失败"
+    elif command -v dnf &> /dev/null; then
+      PKG_MANAGER="dnf"
+      info "使用 DNF 安装 wget..."
+      dnf install -y wget || err "wget 安装失败"
+    elif command -v yum &> /dev/null; then
+      PKG_MANAGER="yum"
+      info "使用 YUM 安装 wget..."
+      yum install -y wget || err "wget 安装失败"
+    elif command -v zypper &> /dev/null; then
+      PKG_MANAGER="zypper"
+      info "使用 Zypper 安装 wget..."
+      zypper install -y wget || err "wget 安装失败"
+    elif command -v pacman &> /dev/null; then
+      PKG_MANAGER="pacman"
+      info "使用 Pacman 安装 wget..."
+      pacman -S --noconfirm wget || err "wget 安装失败"
+    else
+      err "无法检测到包管理器，请手动安装 wget"
+    fi
+    ok "wget 安装完成"
+  else
+    ok "wget 已安装"
+  fi
+  
   IMAGES_BASE_URL="https://github.com/xkatld/zjmf-lxd-server/releases/download/images"
   
   declare -A DISTROS
