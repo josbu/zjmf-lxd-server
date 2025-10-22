@@ -55,7 +55,7 @@ if [[ $DELETE == true ]]; then
   # 检测已安装的 LXD
   FOUND_LXD=false
   
-  if [[ -f /snap/bin/lxd || -f /snap/bin/lxc ]]; then
+  if [[ -f /snap/bin/lxd || -f /snap/bin/lxc || -f /var/lib/snapd/snap/bin/lxd || -f /var/lib/snapd/snap/bin/lxc ]]; then
     echo "  - 检测到 Snap 安装的 LXD"
     FOUND_LXD=true
   fi
@@ -103,7 +103,7 @@ if [[ $DELETE == true ]]; then
   fi
   
   # 卸载 Snap LXD
-  if [[ -f /snap/bin/lxd || -f /snap/bin/lxc ]]; then
+  if [[ -f /snap/bin/lxd || -f /snap/bin/lxc || -f /var/lib/snapd/snap/bin/lxd || -f /var/lib/snapd/snap/bin/lxc ]]; then
     info "卸载 Snap LXD..."
     snap remove lxd 2>/dev/null || warn "Snap LXD 卸载失败"
   fi
@@ -149,6 +149,12 @@ if [[ $DELETE == true ]]; then
     ok "已删除环境变量配置文件"
   fi
   
+  info "清理符号链接..."
+  if [[ -L /snap ]]; then
+    rm -f /snap
+    ok "已删除符号链接 /snap"
+  fi
+  
   echo
   ok "LXD 卸载完成！"
   echo
@@ -188,7 +194,7 @@ info "检查 LXD 是否已安装..."
 LXD_INSTALLED=false
 INSTALL_TYPE=""
 
-if [[ -f /snap/bin/lxd || -f /snap/bin/lxc ]]; then
+if [[ -f /snap/bin/lxd || -f /snap/bin/lxc || -f /var/lib/snapd/snap/bin/lxd || -f /var/lib/snapd/snap/bin/lxc ]]; then
     LXD_INSTALLED=true
     INSTALL_TYPE="snap"
 fi
@@ -325,11 +331,18 @@ info "启用 snapd 服务..."
 systemctl enable --now snapd || err "snapd 服务启用失败"
 systemctl enable --now snapd.socket 2>/dev/null || true
 
+# RHEL/CentOS/AlmaLinux 等系统需要额外启用 snapd.seeded
+if [[ "$PKG_MANAGER" == "yum" || "$PKG_MANAGER" == "dnf" ]]; then
+    info "启用 snapd.seeded 服务 (RHEL/CentOS 系统)..."
+    systemctl enable --now snapd.seeded 2>/dev/null || true
+fi
+
 info "配置系统环境变量..."
 if [[ ! -f /etc/profile.d/snap.sh ]]; then
   cat > /etc/profile.d/snap.sh <<'EOF'
 # 添加 Snap 二进制文件目录到 PATH
-export PATH="/snap/bin:$PATH"
+# 支持不同发行版的 snap 路径
+export PATH="/snap/bin:/var/lib/snapd/snap/bin:$PATH"
 EOF
   chmod +x /etc/profile.d/snap.sh
   ok "环境变量配置已写入 /etc/profile.d/snap.sh"
@@ -338,7 +351,7 @@ else
 fi
 
 info "更新当前会话环境变量..."
-export PATH="/snap/bin:$PATH"
+export PATH="/snap/bin:/var/lib/snapd/snap/bin:$PATH"
 
 info "等待 snapd 服务就绪..."
 sleep 5
@@ -365,16 +378,36 @@ info "安装 LXD (Snap)..."
 snap install lxd --channel=latest/stable || err "LXD 安装失败"
 
 info "更新当前会话环境变量..."
-export PATH="/snap/bin:$PATH"
+export PATH="/snap/bin:/var/lib/snapd/snap/bin:$PATH"
 
-info "验证 LXD 安装..."
-if [[ ! -f /snap/bin/lxd ]]; then
+info "检测 LXD 安装路径..."
+LXD_BIN_DIR=""
+if [[ -f /snap/bin/lxd ]]; then
+    LXD_BIN_DIR="/snap/bin"
+    ok "LXD 路径: /snap/bin (Debian/Ubuntu 风格)"
+elif [[ -f /var/lib/snapd/snap/bin/lxd ]]; then
+    LXD_BIN_DIR="/var/lib/snapd/snap/bin"
+    ok "LXD 路径: /var/lib/snapd/snap/bin (RHEL/CentOS 风格)"
+    
+    # 创建符号链接以保持一致性
+    info "创建符号链接 /snap -> /var/lib/snapd/snap..."
+    if [[ ! -e /snap ]]; then
+        ln -s /var/lib/snapd/snap /snap 2>/dev/null || warn "符号链接创建失败（不影响使用）"
+    fi
+else
     err "lxd 命令不可用，安装失败"
 fi
 
-if [[ ! -f /snap/bin/lxc ]]; then
+info "验证 LXD 安装..."
+if [[ ! -f "$LXD_BIN_DIR/lxd" ]]; then
+    err "lxd 命令不可用，安装失败"
+fi
+
+if [[ ! -f "$LXD_BIN_DIR/lxc" ]]; then
     err "lxc 命令不可用，安装失败"
 fi
+
+ok "LXD 安装验证通过"
 
 echo
 echo "========================================"
@@ -393,8 +426,9 @@ sleep 3
 
 echo
 ok "LXD 安装完成！"
-echo "  LXD 版本: $(/snap/bin/lxd --version 2>/dev/null || echo '未知')"
-echo "  LXC 版本: $(/snap/bin/lxc --version 2>/dev/null || echo '未知')"
+echo "  安装路径: $LXD_BIN_DIR"
+echo "  LXD 版本: $($LXD_BIN_DIR/lxd --version 2>/dev/null || echo '未知')"
+echo "  LXC 版本: $($LXD_BIN_DIR/lxc --version 2>/dev/null || echo '未知')"
 echo "  性能优化: 已关闭调试日志"
 echo
 
@@ -409,15 +443,15 @@ echo "  - 网络配置可使用默认值"
 echo
 
 # 执行 lxd init 命令，让用户交互式配置
-/snap/bin/lxd init
+$LXD_BIN_DIR/lxd init
 
 if [[ $? -eq 0 ]]; then
     echo
     ok "LXD 初始化完成！"
     echo
     info "验证 LXD 配置..."
-    /snap/bin/lxc network list 2>/dev/null && ok "网络配置正常"
-    /snap/bin/lxc storage list 2>/dev/null && ok "存储池配置正常"
+    $LXD_BIN_DIR/lxc network list 2>/dev/null && ok "网络配置正常"
+    $LXD_BIN_DIR/lxc storage list 2>/dev/null && ok "存储池配置正常"
 else
     echo
     err "LXD 初始化失败"
@@ -429,6 +463,6 @@ echo
 warn "如果当前终端中 lxc/lxd 命令不可用，请执行以下命令之一："
 echo "  1. 重新登录系统"
 echo "  2. 执行: source /etc/profile.d/snap.sh"
-echo "  3. 执行: export PATH=\"/snap/bin:\$PATH\""
+echo "  3. 执行: export PATH=\"/snap/bin:/var/lib/snapd/snap/bin:\$PATH\""
 echo
 ok "详细教程: https://github.com/xkatld/zjmf-lxd-server/wiki"
