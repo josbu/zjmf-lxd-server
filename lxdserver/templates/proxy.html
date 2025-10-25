@@ -316,6 +316,46 @@
                                    placeholder="请输入描述">
                             <small class="form-text text-muted">为该反向代理添加描述信息，方便管理</small>
                         </div>
+                        <hr>
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="sslEnabled" name="ssl_enabled">
+                                <label class="custom-control-label" for="sslEnabled">
+                                    <i class="fas fa-lock text-success mr-1"></i><strong>启用 HTTPS (SSL/TLS)</strong>
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">启用后HTTP请求将自动重定向到HTTPS</small>
+                        </div>
+                        <div id="sslOptions" style="display:none;">
+                            <div class="form-group">
+                                <label>
+                                    <i class="fas fa-certificate mr-1"></i>SSL 证书类型
+                                </label>
+                                <select name="ssl_type" class="form-control" id="sslType">
+                                    <option value="self-signed">自动生成自签名证书（10年有效期）</option>
+                                    <option value="custom">手动填写证书内容</option>
+                                </select>
+                                <small class="form-text text-muted">自签名证书：浏览器会提示不安全，但仍可加密传输</small>
+                            </div>
+                            <div id="customCertFields" style="display:none;">
+                                <div class="form-group">
+                                    <label for="sslCert">
+                                        <i class="fas fa-file-alt mr-1"></i>SSL 证书内容 <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea name="ssl_cert" class="form-control" id="sslCert" rows="6" 
+                                              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                                    <small class="form-text text-muted">粘贴完整的证书内容（PEM格式）</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sslKey">
+                                        <i class="fas fa-key mr-1"></i>SSL 私钥内容 <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea name="ssl_key" class="form-control" id="sslKey" rows="6" 
+                                              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+                                    <small class="form-text text-muted">粘贴完整的私钥内容（PEM格式）</small>
+                                </div>
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -418,7 +458,17 @@ function fetchProxyList() {
                             descriptionDisplay = '<div class="description-text text-muted" title="' + autoDescription + '" style="font-style: italic;">' + autoDescription + '</div>';
                         }
                         
-                        const protocolDisplay = '<span class="badge badge-success" style="font-size: 0.85rem; padding: 5px 10px;">HTTP</span>';
+                        const sslEnabled = item.ssl_enabled || false;
+                        const sslType = item.ssl_type || 'none';
+                        let protocolDisplay = '';
+                        if (sslEnabled) {
+                            const sslBadge = sslType === 'self-signed' ? 
+                                '<span class="badge badge-warning" style="font-size: 0.7rem; margin-left: 2px;" title="自签名证书">自签</span>' : 
+                                '<span class="badge badge-info" style="font-size: 0.7rem; margin-left: 2px;" title="自定义证书">自定义</span>';
+                            protocolDisplay = '<span class="badge badge-success" style="font-size: 0.85rem; padding: 5px 10px;"><i class="fas fa-lock mr-1"></i>HTTPS</span>' + sslBadge;
+                        } else {
+                            protocolDisplay = '<span class="badge badge-secondary" style="font-size: 0.85rem; padding: 5px 10px;">HTTP</span>';
+                        }
                         const portDisplay = '<span class="badge badge-success" style="font-size: 0.85rem; padding: 5px 10px;">' + containerPort + '</span>';
                         
                         html += '<tr>' +
@@ -524,8 +574,31 @@ function closeAddModal() {
     setTimeout(function() {
         const formEl = document.getElementById('addProxyForm');
         if (formEl) formEl.reset();
+        $('#sslOptions').hide();
+        $('#customCertFields').hide();
     }, 150);
 }
+
+// SSL选项控制
+$('#sslEnabled').on('change', function() {
+    if ($(this).is(':checked')) {
+        $('#sslOptions').slideDown(200);
+    } else {
+        $('#sslOptions').slideUp(200);
+        $('#customCertFields').slideUp(200);
+    }
+});
+
+// SSL类型选择控制
+$('#sslType').on('change', function() {
+    if ($(this).val() === 'custom') {
+        $('#customCertFields').slideDown(200);
+    } else {
+        $('#customCertFields').slideUp(200);
+        $('#sslCert').val('');
+        $('#sslKey').val('');
+    }
+});
 
 // 删除反向代理
 $(document).on('click', '.delete-proxy-btn', function (e) {
@@ -636,10 +709,20 @@ $('.confirm-btn-proxy').on('click', function () {
         current_button.html('<i class="fas fa-circle-notch fa-spin"></i>');
         current_button.data('submit', 'submit');
 
+        // 构建提交数据
+        var formData = $('#addProxyForm').serialize() + '&func=proxyadd';
+        
+        // 处理SSL复选框
+        if ($('#sslEnabled').is(':checked')) {
+            formData += '&ssl_enabled=true';
+        } else {
+            formData += '&ssl_enabled=false';
+        }
+
         ajax({
             type: 'post',
             url: MODULE_API_URL,
-            data: $('#addProxyForm').serialize() + '&func=proxyadd',
+            data: formData,
             success: function (data) {
                 current_button.html(current_button.data('orig-html') || '确认添加');
                 current_button.data('submit', '');
