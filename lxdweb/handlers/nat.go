@@ -242,7 +242,7 @@ func DeleteNATRule(c *gin.Context) {
 		})
 		return
 	}
-	if err := database.DB.Delete(&rule).Error; err != nil {
+	if err := database.DB.Unscoped().Delete(&rule).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "删除失败: " + err.Error(),
@@ -250,7 +250,7 @@ func DeleteNATRule(c *gin.Context) {
 		return
 	}
 
-	database.DB.Where("node_id = ? AND container_hostname = ? AND external_port = ? AND protocol = ?",
+	database.DB.Unscoped().Where("node_id = ? AND container_hostname = ? AND external_port = ? AND protocol = ?",
 		rule.NodeID, rule.ContainerHostname, rule.ExternalPort, rule.Protocol).
 		Delete(&models.NATRuleCache{})
 

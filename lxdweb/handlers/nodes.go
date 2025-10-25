@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"lxdweb/database"
 	"lxdweb/models"
+	"lxdweb/pkg/logger"
 	"lxdweb/services"
 	"net/http"
 	"strconv"
 	"time"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func applySyncPreset(preset string) (batchSize int, batchInterval int) {
@@ -222,17 +225,34 @@ func GetNode(c *gin.Context) {
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Router /api/nodes [post]
 func CreateNode(c *gin.Context) {
+	ctx := c.Request.Context()
+	
 	var req models.CreateNodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Global.Error(ctx, "创建节点参数解析失败", 
+			zap.Error(err),
+			zap.String("action", "create_node"))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "参数错误: " + err.Error(),
 		})
 		return
 	}
+	
+	logger.Global.Info(ctx, "收到创建节点请求",
+		zap.String("name", req.Name),
+		zap.String("address", req.Address),
+		zap.String("sync_preset", req.SyncPreset),
+		zap.Int("batch_size", req.BatchSize),
+		zap.Int("batch_interval", req.BatchInterval),
+		zap.String("action", "create_node"))
+	
 	var count int64
-	database.DB.Model(&models.Node{}).Where("name = ?", req.Name).Count(&count)
+	database.DB.Unscoped().Model(&models.Node{}).Where("name = ?", req.Name).Count(&count)
 	if count > 0 {
+		logger.Global.Warn(ctx, "节点名称已存在",
+			zap.String("name", req.Name),
+			zap.String("action", "create_node"))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "节点名称已存在",
@@ -268,13 +288,31 @@ func CreateNode(c *gin.Context) {
 		BatchSize:     batchSize,
 		BatchInterval: batchInterval,
 	}
+	
+	logger.Global.Debug(ctx, "准备创建节点",
+		zap.String("name", node.Name),
+		zap.String("address", node.Address),
+		zap.Int("batch_size", node.BatchSize),
+		zap.Int("batch_interval", node.BatchInterval),
+		zap.String("action", "create_node"))
+	
 	if err := database.DB.Create(&node).Error; err != nil {
+		logger.Global.Error(ctx, "数据库创建节点失败",
+			zap.Error(err),
+			zap.String("name", req.Name),
+			zap.String("action", "create_node"))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "创建失败: " + err.Error(),
 		})
 		return
 	}
+	
+	logger.Global.Info(ctx, "节点创建成功",
+		zap.Uint("node_id", node.ID),
+		zap.String("name", node.Name),
+		zap.String("action", "create_node"))
+	
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "创建成功",
@@ -294,28 +332,47 @@ func CreateNode(c *gin.Context) {
 // @Failure 404 {object} map[string]interface{} "节点不存在"
 // @Router /api/nodes/{id} [put]
 func UpdateNode(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.Param("id")
+	
 	var node models.Node
 	if err := database.DB.First(&node, id).Error; err != nil {
+		logger.Global.Warn(ctx, "更新节点失败-节点不存在",
+			zap.String("node_id", id),
+			zap.String("action", "update_node"))
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "节点不存在",
 		})
 		return
 	}
+	
 	var req models.UpdateNodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Global.Error(ctx, "更新节点参数解析失败",
+			zap.Error(err),
+			zap.Uint("node_id", node.ID),
+			zap.String("action", "update_node"))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "参数错误: " + err.Error(),
 		})
 		return
 	}
+	
+	logger.Global.Info(ctx, "收到更新节点请求",
+		zap.Uint("node_id", node.ID),
+		zap.String("name", req.Name),
+		zap.String("action", "update_node"))
 	updates := map[string]interface{}{}
 	if req.Name != "" {
 		var count int64
-		database.DB.Model(&models.Node{}).Where("name = ? AND id != ?", req.Name, id).Count(&count)
+		database.DB.Unscoped().Model(&models.Node{}).Where("name = ? AND id != ?", req.Name, id).Count(&count)
 		if count > 0 {
+			logger.Global.Warn(ctx, "节点名称已存在",
+				zap.String("name", req.Name),
+				zap.Uint("node_id", node.ID),
+				zap.String("action", "update_node"))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code": 400,
 				"msg":  "节点名称已存在",
@@ -354,13 +411,23 @@ func UpdateNode(c *gin.Context) {
 	}
 	
 	if err := database.DB.Model(&node).Updates(updates).Error; err != nil {
+		logger.Global.Error(ctx, "数据库更新节点失败",
+			zap.Error(err),
+			zap.Uint("node_id", node.ID),
+			zap.String("action", "update_node"))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "更新失败: " + err.Error(),
 		})
 		return
 	}
+	
 	database.DB.First(&node, id)
+	logger.Global.Info(ctx, "节点更新成功",
+		zap.Uint("node_id", node.ID),
+		zap.String("name", node.Name),
+		zap.String("action", "update_node"))
+	
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "更新成功",
@@ -377,9 +444,14 @@ func UpdateNode(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "删除失败"
 // @Router /api/nodes/{id} [delete]
 func DeleteNode(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.Param("id")
 	nodeID, err := strconv.ParseUint(id, 10, 32)
 	if err != nil {
+		logger.Global.Warn(ctx, "删除节点失败-无效ID",
+			zap.String("node_id", id),
+			zap.Error(err),
+			zap.String("action", "delete_node"))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的节点ID",
@@ -387,19 +459,77 @@ func DeleteNode(c *gin.Context) {
 		return
 	}
 	
-	database.DB.Where("node_id = ?", nodeID).Delete(&models.ContainerCache{})
-	database.DB.Where("node_id = ?", nodeID).Delete(&models.NATRule{})
-	database.DB.Where("node_id = ?", nodeID).Delete(&models.IPv6BindingCache{})
-	database.DB.Where("node_id = ?", nodeID).Delete(&models.ProxyConfigCache{})
-	database.DB.Where("node_id = ?", nodeID).Delete(&models.NodeInfoCache{})
+	logger.Global.Info(ctx, "开始删除节点及关联数据",
+		zap.Uint64("node_id", nodeID),
+		zap.String("action", "delete_node"))
 	
-	if err := database.DB.Delete(&models.Node{}, id).Error; err != nil {
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.Container{}).Error; err != nil {
+			return fmt.Errorf("删除容器数据失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ContainerCache{}).Error; err != nil {
+			return fmt.Errorf("删除容器缓存失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATRule{}).Error; err != nil {
+			return fmt.Errorf("删除NAT规则失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATRuleCache{}).Error; err != nil {
+			return fmt.Errorf("删除NAT缓存失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.IPv6BindingCache{}).Error; err != nil {
+			return fmt.Errorf("删除IPv6缓存失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ProxyConfigCache{}).Error; err != nil {
+			return fmt.Errorf("删除代理缓存失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NodeInfoCache{}).Error; err != nil {
+			return fmt.Errorf("删除节点缓存失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.SyncTask{}).Error; err != nil {
+			return fmt.Errorf("删除同步任务失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATSyncTask{}).Error; err != nil {
+			return fmt.Errorf("删除NAT同步任务失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.IPv6SyncTask{}).Error; err != nil {
+			return fmt.Errorf("删除IPv6同步任务失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ProxySyncTask{}).Error; err != nil {
+			return fmt.Errorf("删除代理同步任务失败: %w", err)
+		}
+		
+		if err := tx.Unscoped().Delete(&models.Node{}, id).Error; err != nil {
+			return fmt.Errorf("删除节点失败: %w", err)
+		}
+		
+		return nil
+	})
+	
+	if err != nil {
+		logger.Global.Error(ctx, "数据库删除节点失败",
+			zap.Error(err),
+			zap.Uint64("node_id", nodeID),
+			zap.String("action", "delete_node"))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "删除失败: " + err.Error(),
 		})
 		return
 	}
+	
+	logger.Global.Info(ctx, "节点删除成功",
+		zap.Uint64("node_id", nodeID),
+		zap.String("action", "delete_node"))
 	
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
@@ -507,4 +637,243 @@ func updateNodeStatus(nodeID uint, status string) {
 		"status":     status,
 		"last_check": now,
 	})
+}
+
+func ExportNodes(c *gin.Context) {
+	var nodes []models.Node
+	if err := database.DB.Find(&nodes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "查询失败",
+		})
+		return
+	}
+
+	exportData := make([]map[string]interface{}, 0, len(nodes))
+	for _, node := range nodes {
+		exportData = append(exportData, map[string]interface{}{
+			"name":           node.Name,
+			"address":        node.Address,
+			"api_key":        node.APIKey,
+			"description":    node.Description,
+			"sync_preset":    node.SyncPreset,
+			"batch_size":     node.BatchSize,
+			"batch_interval": node.BatchInterval,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": exportData,
+	})
+}
+
+func ImportNodes(c *gin.Context) {
+	ctx := c.Request.Context()
+	
+	var importData []map[string]interface{}
+	if err := c.ShouldBindJSON(&importData); err != nil {
+		logger.Global.Error(ctx, "导入节点参数解析失败",
+			zap.Error(err),
+			zap.String("action", "import_nodes"))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	logger.Global.Info(ctx, "开始批量导入节点",
+		zap.Int("total", len(importData)),
+		zap.String("action", "import_nodes"))
+	
+	successCount := 0
+	failedCount := 0
+	var errors []string
+
+	for _, nodeData := range importData {
+		name, _ := nodeData["name"].(string)
+		address, _ := nodeData["address"].(string)
+		
+		if name == "" || address == "" {
+			failedCount++
+			errors = append(errors, fmt.Sprintf("节点数据缺少必填字段"))
+			continue
+		}
+
+		var existingNode models.Node
+		if err := database.DB.Unscoped().Where("name = ?", name).First(&existingNode).Error; err == nil {
+			failedCount++
+			errors = append(errors, fmt.Sprintf("节点 %s 已存在", name))
+			continue
+		}
+
+		syncPreset, _ := nodeData["sync_preset"].(string)
+		if syncPreset == "" {
+			syncPreset = "medium"
+		}
+
+		batchSize, _ := nodeData["batch_size"].(float64)
+		batchInterval, _ := nodeData["batch_interval"].(float64)
+		
+		if syncPreset != "custom" {
+			bs, bi := applySyncPreset(syncPreset)
+			batchSize = float64(bs)
+			batchInterval = float64(bi)
+		}
+		if batchSize == 0 {
+			batchSize = 5
+		}
+		if batchInterval == 0 {
+			batchInterval = 5
+		}
+
+		apiKey, _ := nodeData["api_key"].(string)
+		description, _ := nodeData["description"].(string)
+
+		node := models.Node{
+			Name:          name,
+			Address:       address,
+			APIKey:        apiKey,
+			Description:   description,
+			Status:        "inactive",
+			SyncPreset:    syncPreset,
+			BatchSize:     int(batchSize),
+			BatchInterval: int(batchInterval),
+		}
+
+		if err := database.DB.Create(&node).Error; err != nil {
+			failedCount++
+			errors = append(errors, fmt.Sprintf("节点 %s 创建失败: %v", name, err))
+			continue
+		}
+
+		successCount++
+	}
+
+	logger.Global.Info(ctx, "批量导入节点完成",
+		zap.Int("success", successCount),
+		zap.Int("failed", failedCount),
+		zap.String("action", "import_nodes"))
+	
+	c.JSON(http.StatusOK, gin.H{
+		"code":          200,
+		"msg":           fmt.Sprintf("导入完成：成功 %d 个，失败 %d 个", successCount, failedCount),
+		"success_count": successCount,
+		"failed_count":  failedCount,
+		"errors":        errors,
+	})
+}
+
+func BatchDeleteNodes(c *gin.Context) {
+	ctx := c.Request.Context()
+	
+	var req struct {
+		IDs []uint `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Global.Error(ctx, "批量删除节点参数解析失败",
+			zap.Error(err),
+			zap.String("action", "batch_delete_nodes"))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	logger.Global.Info(ctx, "开始批量删除节点",
+		zap.Int("count", len(req.IDs)),
+		zap.String("action", "batch_delete_nodes"))
+	
+	successCount := 0
+	failedCount := 0
+	var failedErrors []string
+
+	for _, nodeID := range req.IDs {
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.Container{}).Error; err != nil {
+				return fmt.Errorf("删除容器数据失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ContainerCache{}).Error; err != nil {
+				return fmt.Errorf("删除容器缓存失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATRule{}).Error; err != nil {
+				return fmt.Errorf("删除NAT规则失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATRuleCache{}).Error; err != nil {
+				return fmt.Errorf("删除NAT缓存失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.IPv6BindingCache{}).Error; err != nil {
+				return fmt.Errorf("删除IPv6缓存失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ProxyConfigCache{}).Error; err != nil {
+				return fmt.Errorf("删除代理缓存失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NodeInfoCache{}).Error; err != nil {
+				return fmt.Errorf("删除节点缓存失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.SyncTask{}).Error; err != nil {
+				return fmt.Errorf("删除同步任务失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATSyncTask{}).Error; err != nil {
+				return fmt.Errorf("删除NAT同步任务失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.IPv6SyncTask{}).Error; err != nil {
+				return fmt.Errorf("删除IPv6同步任务失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Where("node_id = ?", nodeID).Delete(&models.ProxySyncTask{}).Error; err != nil {
+				return fmt.Errorf("删除代理同步任务失败: %w", err)
+			}
+			
+			if err := tx.Unscoped().Delete(&models.Node{}, nodeID).Error; err != nil {
+				return fmt.Errorf("删除节点失败: %w", err)
+			}
+			
+			return nil
+		})
+		
+		if err != nil {
+			failedCount++
+			failedErrors = append(failedErrors, fmt.Sprintf("节点 %d: %s", nodeID, err.Error()))
+			logger.Global.Error(ctx, "批量删除单个节点失败",
+				zap.Uint("node_id", nodeID),
+				zap.Error(err),
+				zap.String("action", "batch_delete_nodes"))
+		} else {
+			successCount++
+			logger.Global.Info(ctx, "批量删除单个节点成功",
+				zap.Uint("node_id", nodeID),
+				zap.String("action", "batch_delete_nodes"))
+		}
+	}
+
+	logger.Global.Info(ctx, "批量删除节点完成",
+		zap.Int("success", successCount),
+		zap.Int("failed", failedCount),
+		zap.String("action", "batch_delete_nodes"))
+	
+	response := gin.H{
+		"code":          200,
+		"msg":           fmt.Sprintf("批量删除完成：成功 %d 个，失败 %d 个", successCount, failedCount),
+		"success_count": successCount,
+		"failed_count":  failedCount,
+	}
+	
+	if len(failedErrors) > 0 {
+		response["errors"] = failedErrors
+	}
+	
+	c.JSON(http.StatusOK, response)
 }

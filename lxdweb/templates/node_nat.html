@@ -71,7 +71,7 @@
                     </div>
                     <div class="form-control">
                         <label class="label"><span class="label-text">协议 *</span></label>
-                        <select id="natProtocol" required class="select select-bordered">
+                        <select id="natProtocol" required class="select select-bordered" onchange="checkNATPort()">
                             <option value="tcp">TCP</option>
                             <option value="udp">UDP</option>
                         </select>
@@ -80,7 +80,10 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div class="form-control">
                         <label class="label"><span class="label-text">外部端口 *</span></label>
-                        <input type="number" id="natExternalPort" required min="10000" max="65535" class="input input-bordered" placeholder="10000-65535">
+                        <input type="number" id="natExternalPort" required min="10000" max="65535" class="input input-bordered" placeholder="10000-65535" onblur="checkNATPort()">
+                        <label class="label">
+                            <span id="natPortCheck" class="label-text-alt"></span>
+                        </label>
                     </div>
                     <div class="form-control">
                         <label class="label"><span class="label-text">内部端口 *</span></label>
@@ -93,7 +96,7 @@
                 </div>
                 <div class="modal-action">
                     <button type="button" onclick="closeNATModal()" class="btn">取消</button>
-                    <button type="submit" class="btn btn-primary">添加</button>
+                    <button type="submit" class="btn btn-primary" id="natSubmitBtn">添加</button>
                 </div>
             </form>
         </div>
@@ -176,26 +179,80 @@
             $('#natContent').html(html);
         }
 
+        function checkNATPort() {
+            const port = $('#natExternalPort').val();
+            const protocol = $('#natProtocol').val();
+            const containerHostname = $('#natContainer').val();
+            
+            if (!port || !containerHostname) {
+                $('#natPortCheck').html('');
+                return;
+            }
+
+            // 验证端口范围
+            const portNum = parseInt(port);
+            if (portNum < 10000 || portNum > 65535) {
+                $('#natPortCheck').html('<span class="text-error">✗ 端口必须在 10000-65535 范围内</span>');
+                $('#natSubmitBtn').prop('disabled', true);
+                return;
+            }
+            
+            $('#natPortCheck').html('<span class="loading loading-spinner loading-xs"></span> 检测中...');
+            $('#natSubmitBtn').prop('disabled', true);
+            
+            $.get(`/api/nat/check?node_id=${nodeId}&hostname=${containerHostname}&port=${port}&protocol=${protocol}`, function(result) {
+                if (result.code === 200) {
+                    if (result.data && result.data.available) {
+                        $('#natPortCheck').html('<span class="text-success">✓ 端口可用</span>');
+                        $('#natSubmitBtn').prop('disabled', false);
+                    } else {
+                        $('#natPortCheck').html('<span class="text-error">✗ 端口已被占用</span>');
+                        $('#natSubmitBtn').prop('disabled', true);
+                    }
+                } else {
+                    $('#natPortCheck').html('<span class="text-warning">检测失败: ' + (result.msg || '未知错误') + '</span>');
+                    $('#natSubmitBtn').prop('disabled', true);
+                }
+            }).fail(function() {
+                $('#natPortCheck').html('<span class="text-warning">检测失败</span>');
+                $('#natSubmitBtn').prop('disabled', true);
+            });
+        }
+
         function showAddNATModal() {
             const containers = containersData.map(c => `<option value="${c.hostname}">${c.hostname}</option>`).join('');
             $('#natContainer').html('<option value="">选择容器</option>' + containers);
+            $('#natPortCheck').html('');
+            $('#natSubmitBtn').prop('disabled', false);
             document.getElementById('addNATModal').showModal();
         }
 
         function closeNATModal() {
             document.getElementById('addNATModal').close();
             $('#addNATForm')[0].reset();
+            $('#natPortCheck').html('');
+            $('#natSubmitBtn').prop('disabled', false);
         }
 
         function submitNATForm() {
+            const externalPort = parseInt($('#natExternalPort').val());
+            
+            // 再次验证端口范围
+            if (externalPort < 10000 || externalPort > 65535) {
+                showToast('error', '外部端口必须在 10000-65535 范围内');
+                return;
+            }
+
             const data = {
                 node_id: nodeId,
                 container_hostname: $('#natContainer').val(),
                 protocol: $('#natProtocol').val(),
-                external_port: parseInt($('#natExternalPort').val()),
+                external_port: externalPort,
                 internal_port: parseInt($('#natInternalPort').val()),
                 description: $('#natDescription').val()
             };
+
+            $('#natSubmitBtn').prop('disabled', true);
 
             $.ajax({
                 url: '/api/nat',
@@ -209,7 +266,12 @@
                         loadNAT();
                     } else {
                         showToast('error', result.msg);
+                        $('#natSubmitBtn').prop('disabled', false);
                     }
+                },
+                error: function() {
+                    showToast('error', '添加失败，请重试');
+                    $('#natSubmitBtn').prop('disabled', false);
                 }
             });
         }

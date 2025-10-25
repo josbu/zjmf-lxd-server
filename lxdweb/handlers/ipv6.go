@@ -368,7 +368,7 @@ func DeleteIPv6Binding(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Delete(&binding).Error; err != nil {
+	if err := database.DB.Unscoped().Delete(&binding).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "删除缓存失败: " + err.Error(),

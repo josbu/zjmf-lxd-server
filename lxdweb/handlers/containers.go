@@ -258,7 +258,12 @@ func DeleteContainer(c *gin.Context) {
 	}
 	result := callNodeAPI(node, "GET", "/api/delete?hostname="+name, nil)
 	if result["code"] == float64(200) {
-		database.DB.Where("node_id = ? AND hostname = ?", node.ID, name).Delete(&models.ContainerCache{})
+		database.DB.Unscoped().Where("node_id = ? AND hostname = ?", node.ID, name).Delete(&models.Container{})
+		database.DB.Unscoped().Where("node_id = ? AND hostname = ?", node.ID, name).Delete(&models.ContainerCache{})
+		database.DB.Unscoped().Where("node_id = ? AND container_hostname = ?", node.ID, name).Delete(&models.NATRule{})
+		database.DB.Unscoped().Where("node_id = ? AND container_hostname = ?", node.ID, name).Delete(&models.NATRuleCache{})
+		database.DB.Unscoped().Where("node_id = ? AND hostname = ?", node.ID, name).Delete(&models.IPv6BindingCache{})
+		database.DB.Unscoped().Where("node_id = ? AND hostname = ?", node.ID, name).Delete(&models.ProxyConfigCache{})
 	}
 	c.JSON(http.StatusOK, result)
 }

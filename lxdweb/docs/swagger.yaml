@@ -68,6 +68,14 @@ definitions:
         type: string
       node_id:
         type: integer
+      ssl_cert:
+        type: string
+      ssl_enabled:
+        type: boolean
+      ssl_key:
+        type: string
+      ssl_type:
+        type: string
     required:
     - container_hostname
     - container_port
@@ -122,7 +130,7 @@ info:
     url: https://github.com/xkatld/zjmf-lxd-server/blob/main/LICENSE
   termsOfService: https://github.com/xkatld/zjmf-lxd-server
   title: LXD Web 管理平台
-  version: 1.0.2
+  version: 1.0.3
 paths:
   /:
     get:

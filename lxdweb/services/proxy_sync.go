@@ -267,6 +267,14 @@ func updateProxyCache(node models.Node, data map[string]interface{}) error {
 	}
 	updates["ssl_enabled"] = sslEnabled
 
+	var sslType string
+	if st, ok := data["ssl_type"].(string); ok {
+		sslType = st
+	} else {
+		sslType = "none"
+	}
+	updates["ssl_type"] = sslType
+
 	if status, ok := data["status"].(string); ok {
 		updates["status"] = status
 	} else {
@@ -280,6 +288,7 @@ func updateProxyCache(node models.Node, data map[string]interface{}) error {
 		Domain:      domain,
 		BackendPort: backendPort,
 		SSLEnabled:  sslEnabled,
+		SSLType:     sslType,
 		LastSync:    time.Now(),
 		SyncError:   "",
 	}

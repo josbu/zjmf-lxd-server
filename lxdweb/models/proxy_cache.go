@@ -15,6 +15,7 @@ type ProxyConfigCache struct {
 	Domain      string         `json:"domain" gorm:"size:500;uniqueIndex:idx_unique_proxy_cache"`
 	BackendPort int            `json:"backend_port"`
 	SSLEnabled  bool           `json:"ssl_enabled"`
+	SSLType     string         `json:"ssl_type" gorm:"size:50;default:'none'"`
 	Status      string         `json:"status" gorm:"size:50"`
 	LastSync    time.Time      `json:"last_sync"`
 	SyncError   string         `json:"sync_error" gorm:"type:text"`

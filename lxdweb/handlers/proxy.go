@@ -306,6 +306,13 @@ func CreateProxyConfig(c *gin.Context) {
 		"domain":         req.Domain,
 		"container_port": req.ContainerPort,
 		"description":    req.Description,
+		"ssl_enabled":    req.SSLEnabled,
+		"ssl_type":       req.SSLType,
+	}
+
+	if req.SSLEnabled && req.SSLType == "custom" {
+		proxyData["ssl_cert"] = req.SSLCert
+		proxyData["ssl_key"] = req.SSLKey
 	}
 
 	result := callNodeAPIForProxyMgmt(node, "POST", "/api/proxy/add", proxyData)
@@ -374,7 +381,7 @@ func DeleteProxyConfig(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Delete(&config).Error; err != nil {
+	if err := database.DB.Unscoped().Delete(&config).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "删除缓存失败: " + err.Error(),

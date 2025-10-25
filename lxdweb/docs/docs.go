@@ -2744,6 +2744,18 @@ const docTemplate = `{
                 },
                 "node_id": {
                     "type": "integer"
+                },
+                "ssl_cert": {
+                    "type": "string"
+                },
+                "ssl_enabled": {
+                    "type": "boolean"
+                },
+                "ssl_key": {
+                    "type": "string"
+                },
+                "ssl_type": {
+                    "type": "string"
                 }
             }
         },
@@ -2811,7 +2823,7 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0.2",
+	Version:          "1.0.3",
 	Host:             "localhost:3000",
 	BasePath:         "/",
 	Schemes:          []string{},

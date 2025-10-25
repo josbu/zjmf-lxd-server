@@ -1,5 +1,5 @@
 // @title LXD Web 管理平台
-// @version 1.0.2
+// @version 1.0.3
 // @description LXD 容器管理 Web 平台，提供多节点管理、容器监控、NAT 配置等功能
 // @termsOfService https://github.com/xkatld/zjmf-lxd-server
 
@@ -110,6 +110,9 @@ func startWebServer() {
 		auth.DELETE("/api/nodes/:id", handlers.DeleteNode)
 		auth.POST("/api/nodes/:id/test", handlers.TestNode)
 		auth.POST("/api/nodes/:id/refresh", handlers.RefreshNodeCache)
+		auth.GET("/api/nodes/export/all", handlers.ExportNodes)
+		auth.POST("/api/nodes/import/batch", handlers.ImportNodes)
+		auth.POST("/api/nodes/delete/batch", handlers.BatchDeleteNodes)
 		
 		// 容器API（保留API接口，但去掉全局页面入口）
 		auth.GET("/api/containers", handlers.GetContainers)

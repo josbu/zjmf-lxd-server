@@ -80,6 +80,32 @@
                     <label class="label"><span class="label-text">描述</span></label>
                     <input type="text" id="proxyDescription" class="input input-bordered" placeholder="代理用途说明">
                 </div>
+                <hr class="my-4">
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text font-semibold">启用 HTTPS (SSL/TLS)</span>
+                        <input type="checkbox" id="sslEnabled" class="checkbox checkbox-primary">
+                    </label>
+                </div>
+                <div id="sslOptions" style="display:none;" class="space-y-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">SSL 证书类型</span></label>
+                        <select id="sslType" class="select select-bordered">
+                            <option value="self-signed">自动生成自签名证书</option>
+                            <option value="custom">手动填写证书内容</option>
+                        </select>
+                    </div>
+                    <div id="customCertFields" style="display:none;" class="space-y-3">
+                        <div class="form-control">
+                            <label class="label"><span class="label-text">SSL 证书内容 *</span></label>
+                            <textarea id="sslCert" class="textarea textarea-bordered" rows="4" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text">SSL 私钥内容 *</span></label>
+                            <textarea id="sslKey" class="textarea textarea-bordered" rows="4" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+                        </div>
+                    </div>
+                </div>
                 <div class="modal-action">
                     <button type="button" onclick="closeProxyModal()" class="btn">取消</button>
                     <button type="submit" class="btn btn-primary">添加</button>
@@ -101,6 +127,25 @@
             $('#addProxyForm').on('submit', function(e) {
                 e.preventDefault();
                 submitProxyForm();
+            });
+
+            $('#sslEnabled').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $('#sslOptions').slideDown(200);
+                } else {
+                    $('#sslOptions').slideUp(200);
+                    $('#customCertFields').slideUp(200);
+                }
+            });
+
+            $('#sslType').on('change', function() {
+                if ($(this).val() === 'custom') {
+                    $('#customCertFields').slideDown(200);
+                } else {
+                    $('#customCertFields').slideUp(200);
+                    $('#sslCert').val('');
+                    $('#sslKey').val('');
+                }
             });
         });
 
@@ -143,6 +188,19 @@
 
             data.forEach(item => {
                 const containerName = item.hostname || item.container_hostname;
+                const sslEnabled = item.ssl_enabled || false;
+                const sslType = item.ssl_type || 'none';
+                
+                let protocolBadge = '';
+                if (sslEnabled) {
+                    const sslTypeBadge = sslType === 'self-signed' ? 
+                        '<span class="badge badge-warning badge-xs ml-1">自签</span>' : 
+                        '<span class="badge badge-info badge-xs ml-1">自定义</span>';
+                    protocolBadge = `<span class="badge badge-success badge-sm">HTTPS${sslTypeBadge}</span>`;
+                } else {
+                    protocolBadge = '<span class="badge badge-ghost badge-sm">HTTP</span>';
+                }
+                
                 html += `
                     <div class="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all">
                         <div class="flex items-center justify-between mb-3">
@@ -155,9 +213,13 @@
                             <p class="text-xs text-gray-600 mb-1">域名</p>
                             <code class="text-xs font-mono text-gray-800 break-all block">${item.domain}</code>
                         </div>
-                        <div class="flex items-center justify-between text-xs">
+                        <div class="flex items-center justify-between text-xs mb-2">
                             <span class="text-gray-600">端口</span>
                             <code class="px-2 py-0.5 text-xs font-medium font-mono text-gray-700 bg-gray-100 rounded">${item.container_port}</code>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-gray-600">协议</span>
+                            ${protocolBadge}
                         </div>
                         ${item.description ? `<p class="text-xs text-gray-600 mt-2">${item.description}</p>` : ''}
                     </div>
@@ -180,13 +242,32 @@
         }
 
         function submitProxyForm() {
+            const sslEnabled = $('#sslEnabled').is(':checked');
+            const sslType = $('#sslType').val();
+
+            if (sslEnabled && sslType === 'custom') {
+                const cert = $('#sslCert').val().trim();
+                const key = $('#sslKey').val().trim();
+                if (!cert || !key) {
+                    showToast('error', '启用自定义SSL证书时，必须提供证书和私钥内容');
+                    return;
+                }
+            }
+
             const data = {
                 node_id: nodeId,
                 container_hostname: $('#proxyContainer').val(),
                 domain: $('#proxyDomain').val(),
                 container_port: parseInt($('#proxyPort').val()),
-                description: $('#proxyDescription').val()
+                description: $('#proxyDescription').val(),
+                ssl_enabled: sslEnabled,
+                ssl_type: sslEnabled ? sslType : 'none'
             };
+
+            if (sslEnabled && sslType === 'custom') {
+                data.ssl_cert = $('#sslCert').val();
+                data.ssl_key = $('#sslKey').val();
+            }
 
             $.ajax({
                 url: '/api/proxy-configs',

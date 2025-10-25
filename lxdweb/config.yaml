@@ -4,7 +4,7 @@ server:
   # 运行模式: debug | release
   mode: "release"
   # 会话密钥
-  session_secret: "test"
+  session_secret: "xxxx"
   # 启用 HTTPS
   enable_https: true
   # 证书文件路径
@@ -18,7 +18,7 @@ database:
 
 logging:
   # 日志级别: debug | info | warn | error
-  level: "error"
+  level: "info"
   # 日志文件保存路径
   file: "lxdweb.log"
   # 单个日志文件最大大小（MB）

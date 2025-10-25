@@ -223,33 +223,33 @@
     <!-- 添加NAT规则模态框 -->
     <dialog id="addNATModal" class="modal">
         <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">添加NAT端口转发</h3>
+            <h3 class="font-bold text-lg mb-4">添加NAT端口转发规则</h3>
             <form id="addNATForm" class="space-y-3">
                 <div class="form-control">
-                    <label class="label"><span class="label-text">外部端口 *</span></label>
-                    <input type="number" id="natExternalPort" required class="input input-bordered input-sm" placeholder="8080" onblur="checkNATPort()">
-                    <label class="label">
-                        <span id="natPortCheck" class="label-text-alt"></span>
-                    </label>
-                </div>
-                <div class="form-control">
-                    <label class="label"><span class="label-text">内部端口 *</span></label>
-                    <input type="number" id="natInternalPort" required class="input input-bordered input-sm" placeholder="80">
-                </div>
-                <div class="form-control">
                     <label class="label"><span class="label-text">协议 *</span></label>
-                    <select id="natProtocol" class="select select-bordered select-sm" onchange="checkNATPort()">
+                    <select id="natProtocol" required class="select select-bordered select-sm" onchange="checkNATPort()">
                         <option value="tcp">TCP</option>
                         <option value="udp">UDP</option>
                     </select>
                 </div>
                 <div class="form-control">
+                    <label class="label"><span class="label-text">外部端口 * <span class="text-xs text-gray-500">(10000-65535)</span></span></label>
+                    <input type="number" id="natExternalPort" required min="10000" max="65535" class="input input-bordered input-sm" placeholder="10000-65535" onblur="checkNATPort()">
+                    <label class="label">
+                        <span id="natPortCheck" class="label-text-alt"></span>
+                    </label>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">内部端口 * <span class="text-xs text-gray-500">(1-65535)</span></span></label>
+                    <input type="number" id="natInternalPort" required min="1" max="65535" class="input input-bordered input-sm" placeholder="1-65535">
+                </div>
+                <div class="form-control">
                     <label class="label"><span class="label-text">描述</span></label>
-                    <input type="text" id="natDescription" class="input input-bordered input-sm" placeholder="Web服务">
+                    <input type="text" id="natDescription" class="input input-bordered input-sm" placeholder="端口用途说明">
                 </div>
                 <div class="modal-action">
                     <button type="button" onclick="closeAddNATModal()" class="btn btn-sm">取消</button>
-                    <button type="submit" class="btn btn-sm btn-primary">添加</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="natSubmitBtn">添加</button>
                 </div>
             </form>
         </div>
@@ -260,10 +260,6 @@
     <dialog id="addIPv6Modal" class="modal">
         <div class="modal-box">
             <h3 class="font-bold text-lg mb-4">添加IPv6地址</h3>
-            <div class="alert alert-info mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                <span>系统将自动从IPv6地址池中分配地址并绑定到容器</span>
-            </div>
             <form id="addIPv6Form" class="space-y-3">
                 <div class="form-control">
                     <label class="label"><span class="label-text">描述（可选）</span></label>
@@ -290,6 +286,32 @@
                 <div class="form-control">
                     <label class="label"><span class="label-text">后端端口 *</span></label>
                     <input type="number" id="proxyBackendPort" required class="input input-bordered input-sm" placeholder="80">
+                </div>
+                <hr class="my-3">
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text font-semibold">启用 HTTPS (SSL/TLS)</span>
+                        <input type="checkbox" id="proxySSLEnabled" class="checkbox checkbox-primary checkbox-sm">
+                    </label>
+                </div>
+                <div id="proxySSLOptions" style="display:none;" class="space-y-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">SSL 证书类型</span></label>
+                        <select id="proxySSLType" class="select select-bordered select-sm">
+                            <option value="self-signed">自动生成自签名证书</option>
+                            <option value="custom">手动填写证书内容</option>
+                        </select>
+                    </div>
+                    <div id="proxyCustomCertFields" style="display:none;" class="space-y-2">
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-xs">SSL 证书内容 *</span></label>
+                            <textarea id="proxySSLCert" class="textarea textarea-bordered textarea-sm" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-xs">SSL 私钥内容 *</span></label>
+                            <textarea id="proxySSLKey" class="textarea textarea-bordered textarea-sm" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-action">
                     <button type="button" onclick="closeAddProxyModal()" class="btn btn-sm">取消</button>
@@ -390,6 +412,25 @@
             $('#addProxyForm').submit(function(e) {
                 e.preventDefault();
                 submitAddProxy();
+            });
+
+            $('#proxySSLEnabled').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $('#proxySSLOptions').slideDown(200);
+                } else {
+                    $('#proxySSLOptions').slideUp(200);
+                    $('#proxyCustomCertFields').slideUp(200);
+                }
+            });
+
+            $('#proxySSLType').on('change', function() {
+                if ($(this).val() === 'custom') {
+                    $('#proxyCustomCertFields').slideDown(200);
+                } else {
+                    $('#proxyCustomCertFields').slideUp(200);
+                    $('#proxySSLCert').val('');
+                    $('#proxySSLKey').val('');
+                }
             });
 
             $('#resetPasswordForm').submit(function(e) {
@@ -764,11 +805,25 @@
                 return;
             }
 
-            let html = '<div class="overflow-x-auto"><table class="table table-xs"><thead><tr class="bg-gray-50"><th class="text-xs text-gray-600">域名</th><th class="text-xs text-gray-600">后端端口</th><th class="text-xs text-gray-600">操作</th></tr></thead><tbody>';
+            let html = '<div class="overflow-x-auto"><table class="table table-xs"><thead><tr class="bg-gray-50"><th class="text-xs text-gray-600">域名</th><th class="text-xs text-gray-600">后端端口</th><th class="text-xs text-gray-600">协议</th><th class="text-xs text-gray-600">操作</th></tr></thead><tbody>';
             configs.forEach(p => {
+                const sslEnabled = p.ssl_enabled || false;
+                const sslType = p.ssl_type || 'none';
+                
+                let protocolBadge = '';
+                if (sslEnabled) {
+                    const sslTypeBadge = sslType === 'self-signed' ? 
+                        '<span class="badge badge-warning badge-xs ml-1">自签</span>' : 
+                        '<span class="badge badge-info badge-xs ml-1">自定义</span>';
+                    protocolBadge = `<span class="badge badge-success badge-sm">HTTPS${sslTypeBadge}</span>`;
+                } else {
+                    protocolBadge = '<span class="badge badge-ghost badge-sm">HTTP</span>';
+                }
+                
                 html += `<tr class="hover">
                     <td><code class="text-xs font-mono text-gray-700">${p.domain}</code></td>
                     <td class="text-xs text-gray-700">${p.backend_port}</td>
+                    <td>${protocolBadge}</td>
                     <td><button onclick="deleteProxy(${p.id})" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button></td>
                 </tr>`;
             });
@@ -908,44 +963,69 @@
                 $('#natPortCheck').html('');
                 return;
             }
+
+            // 验证端口范围
+            const portNum = parseInt(port);
+            if (portNum < 10000 || portNum > 65535) {
+                $('#natPortCheck').html('<span class="text-error">✗ 端口必须在 10000-65535 范围内</span>');
+                $('#natSubmitBtn').prop('disabled', true);
+                return;
+            }
             
             $('#natPortCheck').html('<span class="loading loading-spinner loading-xs"></span> 检测中...');
+            $('#natSubmitBtn').prop('disabled', true);
             
             $.get(`/api/nat/check?node_id=${nodeId}&hostname=${containerName}&port=${port}&protocol=${protocol}`, function(result) {
                 if (result.code === 200) {
                     if (result.data && result.data.available) {
                         $('#natPortCheck').html('<span class="text-success">✓ 端口可用</span>');
+                        $('#natSubmitBtn').prop('disabled', false);
                     } else {
                         $('#natPortCheck').html('<span class="text-error">✗ 端口已被占用</span>');
+                        $('#natSubmitBtn').prop('disabled', true);
                     }
                 } else {
                     $('#natPortCheck').html('<span class="text-warning">检测失败: ' + (result.msg || '未知错误') + '</span>');
+                    $('#natSubmitBtn').prop('disabled', true);
                 }
             }).fail(function() {
                 $('#natPortCheck').html('<span class="text-warning">检测失败</span>');
+                $('#natSubmitBtn').prop('disabled', true);
             });
         }
 
         function showAddNATModal() {
-            document.getElementById('addNATModal').showModal();
             $('#natPortCheck').html('');
+            $('#natSubmitBtn').prop('disabled', false);
+            document.getElementById('addNATModal').showModal();
         }
 
         function closeAddNATModal() {
             document.getElementById('addNATModal').close();
             $('#addNATForm')[0].reset();
             $('#natPortCheck').html('');
+            $('#natSubmitBtn').prop('disabled', false);
         }
 
         function submitAddNAT() {
+            const externalPort = parseInt($('#natExternalPort').val());
+            
+            // 再次验证端口范围
+            if (externalPort < 10000 || externalPort > 65535) {
+                showToast('error', '外部端口必须在 10000-65535 范围内');
+                return;
+            }
+
             const data = {
                 node_id: nodeId,
                 container_hostname: containerName,
-                external_port: parseInt($('#natExternalPort').val()),
-                internal_port: parseInt($('#natInternalPort').val()),
                 protocol: $('#natProtocol').val(),
+                external_port: externalPort,
+                internal_port: parseInt($('#natInternalPort').val()),
                 description: $('#natDescription').val()
             };
+
+            $('#natSubmitBtn').prop('disabled', true);
 
             $.ajax({
                 url: '/api/nat',
@@ -954,12 +1034,17 @@
                 data: JSON.stringify(data),
                 success: function(result) {
                     if (result.code === 200) {
-                        showToast('success', '添加成功');
+                        showToast('success', 'NAT规则添加成功');
                         closeAddNATModal();
                         loadNATRules();
                     } else {
                         showToast('error', result.msg || '添加失败');
+                        $('#natSubmitBtn').prop('disabled', false);
                     }
+                },
+                error: function() {
+                    showToast('error', '添加失败，请重试');
+                    $('#natSubmitBtn').prop('disabled', false);
                 }
             });
         }
@@ -1036,16 +1121,37 @@
         function closeAddProxyModal() {
             document.getElementById('addProxyModal').close();
             $('#addProxyForm')[0].reset();
+            $('#proxySSLOptions').hide();
+            $('#proxyCustomCertFields').hide();
         }
 
         function submitAddProxy() {
+            const sslEnabled = $('#proxySSLEnabled').is(':checked');
+            const sslType = $('#proxySSLType').val();
+
+            if (sslEnabled && sslType === 'custom') {
+                const cert = $('#proxySSLCert').val().trim();
+                const key = $('#proxySSLKey').val().trim();
+                if (!cert || !key) {
+                    showToast('error', '启用自定义SSL证书时，必须提供证书和私钥内容');
+                    return;
+                }
+            }
+
             const data = {
                 node_id: nodeId,
                 container_hostname: containerName,
                 domain: $('#proxyDomain').val(),
                 container_port: parseInt($('#proxyBackendPort').val()),
-                description: ''
+                description: '',
+                ssl_enabled: sslEnabled,
+                ssl_type: sslEnabled ? sslType : 'none'
             };
+
+            if (sslEnabled && sslType === 'custom') {
+                data.ssl_cert = $('#proxySSLCert').val();
+                data.ssl_key = $('#proxySSLKey').val();
+            }
 
             $.ajax({
                 url: '/api/proxy-configs',

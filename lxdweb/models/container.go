@@ -91,6 +91,10 @@ type CreateProxyRequest struct {
 	Domain            string `json:"domain" binding:"required"`
 	ContainerPort     int    `json:"container_port" binding:"required"`
 	Description       string `json:"description"`
+	SSLEnabled        bool   `json:"ssl_enabled"`
+	SSLType           string `json:"ssl_type"`
+	SSLCert           string `json:"ssl_cert"`
+	SSLKey            string `json:"ssl_key"`
 }
 
 type DeleteProxyRequest struct {
