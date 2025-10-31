@@ -150,6 +150,18 @@ nat_api:
     # 忽略的网卡前缀
     ignored_interfaces: ["docker0", "br-"]
 
+ipv4_binding:
+  # IPv4 独立绑定功能总开关
+  enabled: ${IPV4_BINDING_ENABLED}
+  # IPv4 绑定使用的网卡接口
+  interface: "${IPV4_BINDING_INTERFACE}"
+
+  ipv4_pool:
+    # IPv4 地址池起始地址
+    start: "${IPV4_POOL_START}"
+    # 地址池大小
+    pool_size: ${IPV4_POOL_SIZE}
+
 ipv6_binding:
   # IPv6 独立绑定功能总开关
   enabled: ${IPV6_BINDING_ENABLED}
@@ -162,7 +174,7 @@ ipv6_binding:
     # IPv6 前缀长度
     prefix_length: 64
     # 地址池大小
-    pool_size: 1000
+    pool_size: ${IPV6_POOL_SIZE}
 
 proxy_api:
   # 反向代理功能总开关
