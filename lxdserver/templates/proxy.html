@@ -427,8 +427,8 @@ function fetchProxyList() {
         timeout: 10000,
         cache: false,
         success: function(resp) {
-            if (resp && resp.data && Array.isArray(resp.data)) {
-                const list = resp.data;
+            if (resp && resp.data && resp.data.list && Array.isArray(resp.data.list)) {
+                const list = resp.data.list;
                 const $empty = $('#proxy-empty-state');
                 const $listContainer = $('#proxy-list-container');
                 const $tbody = $('#proxy-tbody');

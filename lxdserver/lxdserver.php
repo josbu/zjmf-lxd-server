@@ -21,7 +21,7 @@ function lxdserver_MetaData()
 {
     return [
         'DisplayName' => '魔方财务-LXD对接插件 by xkatld',
-        'APIVersion'  => '1.0.3',
+        'APIVersion'  => '1.0.4',
         'HelpDoc'     => 'https://github.com/xkatld/zjmf-lxd-server',
     ];
 }
@@ -79,13 +79,21 @@ function lxdserver_ConfigOptions()
             'default'     => '100Mbit',
             'key'         => 'egress',
         ],
-        'nat_enabled' => [
+        'network_mode' => [
             'type'        => 'dropdown',
-            'name'        => 'NAT端口转发功能',
-            'description' => '端口映射开关',
-            'default'     => 'true',
-            'key'         => 'nat_enabled',
-            'options'     => ['false' => '禁用', 'true' => '启用'],
+            'name'        => '网络模式',
+            'description' => '选择容器网络运行模式',
+            'default'     => 'mode1',
+            'key'         => 'network_mode',
+            'options'     => [
+                'mode1' => '模式1：IPv4 NAT共享',
+                'mode2' => '模式2：IPv6 NAT共享',
+                'mode3' => '模式3：IPv4/IPv6 NAT共享',
+                'mode4' => '模式4：IPv4 NAT共享 + IPv6独立',
+                'mode5' => '模式5：IPv4独立',
+                'mode6' => '模式6：IPv6独立',
+                'mode7' => '模式7：IPv4独立 + IPv6独立',
+            ],
         ],
         'nat_limit' => [
             'type'        => 'text',
@@ -133,14 +141,12 @@ function lxdserver_ConfigOptions()
             'default'     => '512',
             'key'         => 'max_processes',
         ],
-
-        'ipv6_enabled' => [
-            'type'        => 'dropdown',
-            'name'        => '独立IPv6功能',
-            'description' => '独立IPv6开关',
-            'default'     => 'false',
-            'key'         => 'ipv6_enabled',
-            'options'     => ['false' => '禁用', 'true' => '启用'],
+        'ipv4_limit' => [
+            'type'        => 'text',
+            'name'        => 'IPv4绑定数量',
+            'description' => 'IPv4地址数量上限',
+            'default'     => '1',
+            'key'         => 'ipv4_limit',
         ],
         'ipv6_limit' => [
             'type'        => 'text',
@@ -148,6 +154,22 @@ function lxdserver_ConfigOptions()
             'description' => 'IPv6地址数量上限',
             'default'     => '1',
             'key'         => 'ipv6_limit',
+        ],
+        'ipv4_allow_delete' => [
+            'type'        => 'dropdown',
+            'name'        => 'IPv4允许删除',
+            'description' => '是否可以删除IPv4地址',
+            'default'     => 'false',
+            'key'         => 'ipv4_allow_delete',
+            'options'     => ['true' => '允许', 'false' => '禁止'],
+        ],
+        'ipv6_allow_delete' => [
+            'type'        => 'dropdown',
+            'name'        => 'IPv6允许删除',
+            'description' => '是否可以删除IPv6地址',
+            'default'     => 'true',
+            'key'         => 'ipv6_allow_delete',
+            'options'     => ['true' => '允许', 'false' => '禁止'],
         ],
         'proxy_enabled' => [
             'type'        => 'dropdown',
@@ -263,13 +285,17 @@ function lxdserver_ClientArea($params)
         'info'     => ['name' => '产品信息'],
     ];
     
-    $nat_enabled = ($params['configoptions']['nat_enabled'] ?? 'true') === 'true';
-    if ($nat_enabled) {
+    $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+    
+    if (in_array($network_mode, ['mode1', 'mode2', 'mode3', 'mode4'])) {
         $pages['nat_acl'] = ['name' => 'NAT转发'];
     }
     
-    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
-    if ($ipv6_enabled) {
+    if (in_array($network_mode, ['mode5', 'mode7'])) {
+        $pages['ipv4_acl'] = ['name' => 'IPv4绑定'];
+    }
+    
+    if (in_array($network_mode, ['mode4', 'mode6', 'mode7'])) {
         $pages['ipv6_acl'] = ['name' => 'IPv6绑定'];
     }
     
@@ -314,6 +340,7 @@ function lxdserver_ClientAreaOutput($params, $key)
             'gettraffic' => '/api/traffic',
             'getinfoall' => '/api/info',
             'natlist'    => '/api/natlist',
+            'ipv4list'   => '/api/ipv4/list',
             'ipv6list'   => '/api/ipv6/list',
             'proxylist'  => '/api/proxy/list',
         ];
@@ -360,7 +387,8 @@ function lxdserver_ClientAreaOutput($params, $key)
     }
 
     if ($key == 'nat_acl') {
-        $nat_enabled = ($params['configoptions']['nat_enabled'] ?? 'true') === 'true';
+        $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+        $nat_enabled = in_array($network_mode, ['mode1', 'mode2', 'mode3', 'mode4']);
         
         $requestData = [
             'url'  => '/api/natlist?hostname=' . $params['domain'] . '&_t=' . time(),
@@ -387,8 +415,39 @@ function lxdserver_ClientAreaOutput($params, $key)
         ];
     }
 
+    if ($key == 'ipv4_acl') {
+        $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+        $ipv4_enabled = in_array($network_mode, ['mode5', 'mode7']);
+        
+        $requestData = [
+            'url'  => '/api/ipv4/list?hostname=' . $params['domain'] . '&_t=' . time(),
+            'type' => 'application/x-www-form-urlencoded',
+            'data' => [],
+        ];
+        $res = lxdserver_Curl($params, $requestData, 'GET');
+
+        $ipv4_limit = intval($params['configoptions']['ipv4_limit'] ?? 1);
+        $current_count = lxdserver_getIPv4BindingCount($params);
+        $ipv4_allow_delete = ($params['configoptions']['ipv4_allow_delete'] ?? 'true') === 'true';
+
+        return [
+            'template' => 'templates/ipv4.html',
+            'vars'     => [
+                'list' => $res['data'] ?? [],
+                'msg'  => $res['msg'] ?? '',
+                'ipv4_limit' => $ipv4_limit,
+                'current_count' => $current_count,
+                'remaining_count' => max(0, $ipv4_limit - $current_count),
+                'container_name' => $params['domain'],
+                'ipv4_enabled' => $ipv4_enabled,
+                'ipv4_allow_delete' => $ipv4_allow_delete,
+            ],
+        ];
+    }
+
     if ($key == 'ipv6_acl') {
-        $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
+        $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+        $ipv6_enabled = in_array($network_mode, ['mode4', 'mode6', 'mode7']);
         
         $requestData = [
             'url'  => '/api/ipv6/list?hostname=' . $params['domain'] . '&_t=' . time(),
@@ -399,6 +458,7 @@ function lxdserver_ClientAreaOutput($params, $key)
 
         $ipv6_limit = intval($params['configoptions']['ipv6_limit'] ?? 1);
         $current_count = lxdserver_getIPv6BindingCount($params);
+        $ipv6_allow_delete = ($params['configoptions']['ipv6_allow_delete'] ?? 'true') === 'true';
 
         return [
             'template' => 'templates/ipv6.html',
@@ -410,6 +470,7 @@ function lxdserver_ClientAreaOutput($params, $key)
                 'remaining_count' => max(0, $ipv6_limit - $current_count),
                 'container_name' => $params['domain'],
                 'ipv6_enabled' => $ipv6_enabled,
+                'ipv6_allow_delete' => $ipv6_allow_delete,
             ],
         ];
     }
@@ -443,11 +504,107 @@ function lxdserver_ClientAreaOutput($params, $key)
     }
 }
 
+function lxdserver_getContainerIPs($params, $hostname) {
+    $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+    $server_ipv4 = $params['server_ip'];
+    $server_ipv6 = $params['server_ipv6'] ?? '';
+    
+    $dedicatedip = '';
+    $assignedips = '';
+    
+    switch ($network_mode) {
+        case 'mode1':
+            $dedicatedip = $server_ipv4;
+            $assignedips = '';
+            break;
+        case 'mode2':
+            $dedicatedip = $server_ipv6;
+            $assignedips = '';
+            break;
+        case 'mode3':
+            $dedicatedip = $server_ipv4;
+            $assignedips = $server_ipv6;
+            break;
+        case 'mode4':
+            $dedicatedip = $server_ipv4;
+            $ipv6_list = lxdserver_getIndependentIPv6List($params);
+            $assignedips = !empty($ipv6_list) ? $ipv6_list[0] : '';
+            break;
+        case 'mode5':
+            $ipv4_list = lxdserver_getIndependentIPv4List($params);
+            $dedicatedip = !empty($ipv4_list) ? $ipv4_list[0] : '';
+            $assignedips = '';
+            break;
+        case 'mode6':
+            $ipv6_list = lxdserver_getIndependentIPv6List($params);
+            $dedicatedip = !empty($ipv6_list) ? $ipv6_list[0] : '';
+            $assignedips = '';
+            break;
+        case 'mode7':
+            $ipv4_list = lxdserver_getIndependentIPv4List($params);
+            $ipv6_list = lxdserver_getIndependentIPv6List($params);
+            $dedicatedip = !empty($ipv4_list) ? $ipv4_list[0] : '';
+            $assignedips = !empty($ipv6_list) ? $ipv6_list[0] : '';
+            break;
+    }
+    
+    return [
+        'dedicatedip' => $dedicatedip,
+        'assignedips' => $assignedips,
+    ];
+}
+
+function lxdserver_getIndependentIPv4List($params)
+{
+    $data = [
+        'url'  => '/api/ipv4/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200 && isset($res['data']) && is_array($res['data'])) {
+        $ipv4_addresses = [];
+        foreach ($res['data'] as $item) {
+            if (isset($item['public_ipv4'])) {
+                $ipv4_addresses[] = $item['public_ipv4'];
+            }
+        }
+        return $ipv4_addresses;
+    }
+
+    return [];
+}
+
+function lxdserver_getIndependentIPv6List($params)
+{
+    $data = [
+        'url'  => '/api/ipv6/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200 && isset($res['data']) && is_array($res['data'])) {
+        $ipv6_addresses = [];
+        foreach ($res['data'] as $item) {
+            if (isset($item['public_ipv6'])) {
+                $ipv6_addresses[] = $item['public_ipv6'];
+            }
+        }
+        return $ipv6_addresses;
+    }
+
+    return [];
+}
+
 // 允许客户端调用的函数列表
 function lxdserver_AllowFunction()
 {
     return [
-        'client' => ['natadd', 'natdel', 'natlist', 'natcheck', 'ipv6add', 'ipv6del', 'ipv6list', 'proxyadd', 'proxydel', 'proxylist', 'proxycheck'],
+        'client' => ['natadd', 'natdel', 'natlist', 'natcheck', 'ipv4add', 'ipv4del', 'ipv4list', 'ipv6add', 'ipv6del', 'ipv6list', 'proxyadd', 'proxydel', 'proxylist', 'proxycheck'],
     ];
 }
 
@@ -472,6 +629,7 @@ function lxdserver_CreateAccount($params)
             'egress'        => $params['configoptions']['egress'] ?? '100Mbit',
             'allow_nesting' => ($params['configoptions']['allow_nesting'] ?? 'false') === 'true',
             'traffic_limit' => (int)($params['configoptions']['traffic_limit'] ?? 0),
+            'network_mode'  => $params['configoptions']['network_mode'] ?? 'mode1',
             'cpu_allowance'  => $params['configoptions']['cpu_allowance'] ?? '100%',
             'memory_swap'           => ($params['configoptions']['memory_swap'] ?? 'true') === 'true',
             'max_processes'  => (int)($params['configoptions']['max_processes'] ?? 512),
@@ -486,20 +644,43 @@ function lxdserver_CreateAccount($params)
     lxdserver_debug('创建响应', $res);
 
     if (isset($res['code']) && $res['code'] == '200') {
-        $dedicatedip_value = $params['server_ip'];
+        sleep(2);
+        
+        // 从创建响应中读取IP和SSH端口
+        $dedicatedip = '';
+        $assignedips = '';
+        $ssh_port = 0;
+        
+        if (!empty($res['data']['dedicatedip'])) {
+            $dedicatedip = $res['data']['dedicatedip'];
+            lxdserver_debug('从创建响应获取到dedicatedip', ['dedicatedip' => $dedicatedip]);
+        }
+        
+        if (!empty($res['data']['assignedips'])) {
+            $assignedips = $res['data']['assignedips'];
+            lxdserver_debug('从创建响应获取到assignedips', ['assignedips' => $assignedips]);
+        }
+        
+        if (!empty($res['data']['ssh_port'])) {
+            $ssh_port = $res['data']['ssh_port'];
+            lxdserver_debug('从创建响应获取到ssh_port', ['ssh_port' => $ssh_port]);
+        }
+        
+        // 如果是独立IP模式（mode5-7），IP在创建时为空，需要通过Sync同步获取
+        $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+        if (in_array($network_mode, ['mode5', 'mode6', 'mode7']) && empty($dedicatedip)) {
+            lxdserver_debug('独立IP模式，创建时IP为空，等待异步分配');
+        }
 
         $update = [
-            'dedicatedip'  => $dedicatedip_value,
+            'dedicatedip'  => $dedicatedip,
+            'assignedips'  => $assignedips,
             'domainstatus' => 'Active',
             'username'     => 'root',
         ];
 
-        if (!empty($res['data']['ssh_port'])) {
-            $ssh_port = $res['data']['ssh_port'];
+        if ($ssh_port > 0) {
             $update['port'] = $ssh_port;
-            lxdserver_debug('获取到SSH端口', ['ssh_port' => $ssh_port]);
-        } else {
-            lxdserver_debug('警告：响应中没有SSH端口信息', $res);
         }
 
         try {
@@ -528,10 +709,11 @@ function lxdserver_Sync($params)
     if (isset($res['code']) && $res['code'] == '200') {
         if (class_exists('think\Db') && isset($params['hostid'])) {
             try {
-                $dedicatedip_value = $params['server_ip'];
+                $ipInfo = lxdserver_getContainerIPs($params, $params['domain']);
                 
                 $update_data = [
-                    'dedicatedip' => $dedicatedip_value,
+                    'dedicatedip' => $ipInfo['dedicatedip'],
+                    'assignedips' => $ipInfo['assignedips'],
                 ];
 
                 if (isset($res['data']['ssh_port']) && !empty($res['data']['ssh_port'])) {
@@ -676,33 +858,85 @@ function lxdserver_getNATRuleCount($params)
 // 添加NAT端口转发
 function lxdserver_natadd($params)
 {
-    $nat_enabled = ($params['configoptions']['nat_enabled'] ?? 'true') === 'true';
-    if (!$nat_enabled) {
-        return ['status' => 'error', 'msg' => 'NAT端口转发功能已禁用，请联系管理员启用此功能。'];
+    $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+    if (!in_array($network_mode, ['mode1', 'mode2', 'mode3', 'mode4'])) {
+        return ['status' => 'error', 'msg' => 'NAT端口转发功能未启用，请联系管理员配置正确的网络模式。'];
     }
     
     parse_str(file_get_contents("php://input"), $post);
 
-    $dport = intval($post['dport'] ?? 0);
-    $sport = intval($post['sport'] ?? 0);
-    $dtype = strtolower(trim($post['dtype'] ?? ''));
+    $port_mode = trim($post['port_mode'] ?? 'single');
     $description = trim($post['description'] ?? '');
     $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'false') === 'true';
 
-    if (!in_array($dtype, ['tcp', 'udp'])) {
-        return ['status' => 'error', 'msg' => '不支持的协议类型，仅支持TCP和UDP'];
+    // 根据UDP配置自动设置协议：启用UDP时使用both（TCP+UDP），否则只用tcp
+    $dtype = $udp_enabled ? 'both' : 'tcp';
+
+    $nat_limit = intval($params['configoptions']['nat_limit'] ?? 5);
+    $current_count = lxdserver_getNATRuleCount($params);
+
+    // 端口段模式
+    if ($port_mode === 'range') {
+        $sport_start = intval($post['sport_start'] ?? 0);
+        $sport_end = intval($post['sport_end'] ?? 0);
+        $dport_start = intval($post['dport_start'] ?? 0);
+        $dport_end = intval($post['dport_end'] ?? 0);
+        
+        if ($sport_start <= 0 || $sport_end <= 0 || $dport_start <= 0 || $dport_end <= 0) {
+            return ['status' => 'error', 'msg' => '端口段参数不完整'];
+        }
+        
+        if ($sport_start > $sport_end || $dport_start > $dport_end) {
+            return ['status' => 'error', 'msg' => '端口段起始值不能大于结束值'];
+        }
+        
+        $internal_range = $sport_end - $sport_start + 1;
+        $external_range = $dport_end - $dport_start + 1;
+        
+        if ($internal_range !== $external_range) {
+            return ['status' => 'error', 'msg' => '内网和外网端口范围大小必须一致'];
+        }
+        
+        // 检查端口段数量限制
+        if ($current_count + $internal_range > $nat_limit) {
+            return ['status' => 'error', 'msg' => "端口段包含 {$internal_range} 个端口，将超过NAT规则限制（剩余配额：" . ($nat_limit - $current_count) . "）"];
+        }
+        
+        $requestData = 'hostname=' . urlencode($params['domain']) . 
+                       '&dtype=' . urlencode($dtype) . 
+                       '&sport=' . $sport_start . 
+                       '&sport_end=' . $sport_end . 
+                       '&dport=' . $dport_start . 
+                       '&dport_end=' . $dport_end;
+        
+        if (!empty($description)) {
+            $requestData .= '&description=' . urlencode($description);
+        }
+        
+        $data = [
+            'url'  => '/api/addport',
+            'type' => 'application/x-www-form-urlencoded',
+            'data' => $requestData,
+        ];
+
+        $res = lxdserver_Curl($params, $data, 'POST');
+
+        $protocol_desc = $udp_enabled ? 'TCP+UDP双协议' : 'TCP';
+        if (isset($res['code']) && $res['code'] == 200) {
+            return ['status' => 'success', 'msg' => "端口段添加成功（{$internal_range}个端口，{$protocol_desc}）"];
+        } else {
+            return ['status' => 'error', 'msg' => $res['msg'] ?? '端口段添加失败'];
+        }
     }
     
-    if ($dtype === 'udp' && !$udp_enabled) {
-        return ['status' => 'error', 'msg' => 'UDP协议未启用，请联系管理员开启UDP支持'];
-    }
+    // 单端口模式（原有逻辑）
+    $dport = intval($post['dport'] ?? 0);
+    $sport = intval($post['sport'] ?? 0);
+    
     if ($sport <= 0 || $sport > 65535) {
         return ['status' => 'error', 'msg' => '容器内部端口超过范围'];
     }
 
-    $nat_limit = intval($params['configoptions']['nat_limit'] ?? 5);
-
-    $current_count = lxdserver_getNATRuleCount($params);
     if ($current_count >= $nat_limit) {
         return ['status' => 'error', 'msg' => "NAT规则数量已达到限制（{$nat_limit}条），无法添加更多规则"];
     }
@@ -738,8 +972,9 @@ function lxdserver_natadd($params)
 
     $res = lxdserver_Curl($params, $data, 'POST');
 
+    $protocol_desc = $udp_enabled ? 'TCP+UDP双协议' : 'TCP';
     if (isset($res['code']) && $res['code'] == 200) {
-        return ['status' => 'success', 'msg' => $res['msg'] ?? 'NAT转发添加成功'];
+        return ['status' => 'success', 'msg' => "NAT转发添加成功（{$protocol_desc}）"];
     } else {
         return ['status' => 'error', 'msg' => $res['msg'] ?? 'NAT转发添加失败'];
     }
@@ -1079,6 +1314,62 @@ function lxdserver_TransformAPIResponse($action, $response)
                 ];
             }
             break;
+        
+        case 'ipv4list':
+            if (isset($response['data']) && is_array($response['data'])) {
+                return [
+                    'code' => 200,
+                    'msg' => $response['msg'] ?? 'IPv4列表获取成功',
+                    'data' => [
+                        'list' => $response['data'],
+                        'limit' => 0,
+                        'current' => count($response['data']),
+                    ]
+                ];
+            }
+            break;
+        
+        case 'ipv6list':
+            if (isset($response['data']) && is_array($response['data'])) {
+                return [
+                    'code' => 200,
+                    'msg' => $response['msg'] ?? 'IPv6列表获取成功',
+                    'data' => [
+                        'list' => $response['data'],
+                        'limit' => 0,
+                        'current' => count($response['data']),
+                    ]
+                ];
+            }
+            break;
+        
+        case 'natlist':
+            if (isset($response['data']) && is_array($response['data'])) {
+                return [
+                    'code' => 200,
+                    'msg' => $response['msg'] ?? 'NAT列表获取成功',
+                    'data' => [
+                        'list' => $response['data'],
+                        'limit' => 0,
+                        'current' => count($response['data']),
+                    ]
+                ];
+            }
+            break;
+        
+        case 'proxylist':
+            if (isset($response['data']) && is_array($response['data'])) {
+                return [
+                    'code' => 200,
+                    'msg' => $response['msg'] ?? 'Proxy列表获取成功',
+                    'data' => [
+                        'list' => $response['data'],
+                        'limit' => 0,
+                        'current' => count($response['data']),
+                    ]
+                ];
+            }
+            break;
     }
 
     return $response;
@@ -1294,12 +1585,128 @@ function lxdserver_getIPv6BindingCount($params)
     return 0;
 }
 
+// 添加IPv4独立绑定
+function lxdserver_ipv4add($params)
+{
+    $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+    if (!in_array($network_mode, ['mode5', 'mode7'])) {
+        return ['status' => 'error', 'msg' => 'IPv4独立绑定功能未启用，请联系管理员配置为模式5（IPv4独立）或模式7（IPv4独立 + IPv6独立）。'];
+    }
+    
+    parse_str(file_get_contents("php://input"), $post);
+
+    $description = trim($post['description'] ?? '');
+
+    $ipv4_limit = intval($params['configoptions']['ipv4_limit'] ?? 1);
+    $current_count = lxdserver_getIPv4BindingCount($params);
+    
+    if ($current_count >= $ipv4_limit) {
+        return ['status' => 'error', 'msg' => "IPv4绑定数量已达到限制（{$ipv4_limit}个），无法添加更多绑定"];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&description=' . urlencode($description);
+
+    $data = [
+        'url'  => '/api/ipv4/add',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'POST');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? 'IPv4绑定添加成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? 'IPv4绑定添加失败'];
+    }
+}
+
+// 删除IPv4独立绑定
+function lxdserver_ipv4del($params)
+{
+    $ipv4_allow_delete = ($params['configoptions']['ipv4_allow_delete'] ?? 'true') === 'true';
+    if (!$ipv4_allow_delete) {
+        return ['status' => 'error', 'msg' => '管理员已禁止删除IPv4地址，如需更换IP请联系管理员处理'];
+    }
+    
+    parse_str(file_get_contents("php://input"), $post);
+
+    $public_ipv4 = trim($post['public_ipv4'] ?? '');
+
+    if (empty($public_ipv4)) {
+        return ['status' => 'error', 'msg' => '缺少IPv4地址参数'];
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&public_ipv4=' . urlencode($public_ipv4);
+
+    $data = [
+        'url'  => '/api/ipv4/delete',
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => $requestData,
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'POST');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        return ['status' => 'success', 'msg' => $res['msg'] ?? 'IPv4绑定删除成功'];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? 'IPv4绑定删除失败'];
+    }
+}
+
+// 获取IPv4绑定列表
+function lxdserver_ipv4list($params)
+{
+    
+    $data = [
+        'url'  => '/api/ipv4/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded', 
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200) {
+        $ipv4_limit = intval($params['configoptions']['ipv4_limit'] ?? 1);
+        $current_count = count($res['data'] ?? []);
+        
+        return [
+            'status' => 'success', 
+            'data' => [
+                'list' => $res['data'] ?? [],
+                'limit' => $ipv4_limit,
+                'current' => $current_count,
+            ],
+        ];
+    } else {
+        return ['status' => 'error', 'msg' => $res['msg'] ?? 'IPv4绑定列表获取失败'];
+    }
+}
+
+// 获取IPv4绑定数量
+function lxdserver_getIPv4BindingCount($params)
+{
+    $data = [
+        'url'  => '/api/ipv4/list?hostname=' . urlencode($params['domain']),
+        'type' => 'application/x-www-form-urlencoded',
+        'data' => [],
+    ];
+
+    $res = lxdserver_Curl($params, $data, 'GET');
+
+    if (isset($res['code']) && $res['code'] == 200 && isset($res['data'])) {
+        return count($res['data']);
+    }
+
+    return 0;
+}
+
 // 添加IPv6独立绑定
 function lxdserver_ipv6add($params)
 {
-    $ipv6_enabled = ($params['configoptions']['ipv6_enabled'] ?? 'false') === 'true';
-    if (!$ipv6_enabled) {
-        return ['status' => 'error', 'msg' => 'IPv6独立绑定功能未启用，请联系管理员启用此功能。'];
+    $network_mode = $params['configoptions']['network_mode'] ?? 'mode1';
+    if (!in_array($network_mode, ['mode4', 'mode6', 'mode7'])) {
+        return ['status' => 'error', 'msg' => 'IPv6独立绑定功能未启用，请联系管理员配置为模式4、模式6或模式7。'];
     }
     
     parse_str(file_get_contents("php://input"), $post);
@@ -1333,6 +1740,10 @@ function lxdserver_ipv6add($params)
 // 删除IPv6独立绑定
 function lxdserver_ipv6del($params)
 {
+    $ipv6_allow_delete = ($params['configoptions']['ipv6_allow_delete'] ?? 'true') === 'true';
+    if (!$ipv6_allow_delete) {
+        return ['status' => 'error', 'msg' => '管理员已禁止删除IPv6地址，如需更换IP请联系管理员处理'];
+    }
     
     parse_str(file_get_contents("php://input"), $post);
 

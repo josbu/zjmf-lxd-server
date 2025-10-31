@@ -1,13 +1,13 @@
 <style>
 /* 简洁专业设计风格 */
-.ipv6-card {
+.ipv4-card {
     border: 1px solid #e1e5e9;
     border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.ipv6-card-header {
+.ipv4-card-header {
     background: #4a5568;
     border-radius: 8px 8px 0 0;
     color: white;
@@ -61,7 +61,7 @@
     font-size: 0.85rem;
 }
 
-.ipv6-address {
+.ipv4-address {
     background: #e3f2fd;
     color: #1976d2;
     border: 1px solid #bbdefb;
@@ -73,11 +73,11 @@
     font-size: 0.8rem;
     transition: all 0.2s ease;
     display: inline-block;
-    min-width: 240px;
+    min-width: 140px;
     text-align: center;
 }
 
-.ipv6-address:hover {
+.ipv4-address:hover {
     background: #bbdefb;
     color: #0d47a1;
 }
@@ -161,7 +161,7 @@
 }
 
 .badge-success-modern {
-    background: #28a745;
+    background: #007bff;
     color: white;
     padding: 4px 8px;
     border-radius: 4px;
@@ -176,10 +176,10 @@
         font-size: 0.75rem;
     }
     
-    .ipv6-address {
+    .ipv4-address {
         font-size: 0.7rem;
         padding: 4px 8px;
-        min-width: 180px;
+        min-width: 120px;
     }
     
     .action-btn {
@@ -193,31 +193,30 @@
     }
 }
 </style>
-</style>
 
-<div class="container-fluid" id="ipv6Manager">
+<div class="container-fluid" id="ipv4Manager">
     <div class="card shadow mb-4">
         <div class="card-header py-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="fas fa-globe mr-2"></i>IPv6独立绑定管理
+                        <i class="fas fa-network-wired mr-2"></i>IPv4独立绑定管理
                     </h6>
-                    <small class="text-muted">管理容器的独立公网IPv6地址</small>
+                    <small class="text-muted">管理容器的独立公网IPv4地址</small>
                     <div class="mt-2">
                         <span class="badge badge-secondary ml-2">
-                            已绑定: <span id="current-ipv6-count">0</span>/{$ipv6_limit} 个
+                            已绑定: <span id="current-ipv4-count">0</span>/{$ipv4_limit} 个
                         </span>
-                        <span class="badge badge-success ml-1">
-                            剩余: <span id="remaining-ipv6-count">0</span> 个
+                        <span class="badge badge-primary ml-1">
+                            剩余: <span id="remaining-ipv4-count">0</span> 个
                         </span>
                     </div>
                 </div>
                 <div class="d-flex">
-                    <button class="btn btn-create btn-sm mr-2" data-toggle="modal" data-target="#addIPv6Modal" id="add-ipv6-btn">
-                        <i class="fas fa-plus mr-1"></i>绑定IPv6
+                    <button class="btn btn-create btn-sm mr-2" data-toggle="modal" data-target="#addIPv4Modal" id="add-ipv4-btn">
+                        <i class="fas fa-plus mr-1"></i>绑定IPv4
                     </button>
-                    <button class="btn btn-secondary btn-sm" onclick="refreshIPv6List()">
+                    <button class="btn btn-secondary btn-sm" onclick="refreshIPv4List()">
                         <i class="fas fa-sync-alt mr-1"></i>刷新
                     </button>
                 </div>
@@ -225,24 +224,24 @@
         </div>
 
         <div class="card-body">
-            <div id="ipv6-empty-state" class="text-center py-5" style="display:none">
+            <div id="ipv4-empty-state" class="text-center py-5" style="display:none">
                 <div class="empty-state-content">
-                    <i class="fas fa-globe fa-4x text-muted mb-4" style="opacity:0.3"></i>
-                    <h4 class="text-muted mb-3">暂无IPv6绑定</h4>
-                    <p class="text-muted mb-4">您还没有创建任何IPv6独立地址绑定</p>
-                    <button class="btn btn-create btn-lg" data-toggle="modal" data-target="#addIPv6Modal" style="border-radius: 17px; padding: 6px 20px;">
-                        <i class="fas fa-plus mr-2"></i>创建第一个IPv6绑定
+                    <i class="fas fa-network-wired fa-4x text-muted mb-4" style="opacity:0.3"></i>
+                    <h4 class="text-muted mb-3">暂无IPv4绑定</h4>
+                    <p class="text-muted mb-4">您还没有创建任何IPv4独立地址绑定</p>
+                    <button class="btn btn-create btn-lg" data-toggle="modal" data-target="#addIPv4Modal" style="border-radius: 17px; padding: 6px 20px;">
+                        <i class="fas fa-plus mr-2"></i>创建第一个IPv4绑定
                     </button>
                 </div>
             </div>
 
-            <div id="ipv6-list-container" style="display:block">
+            <div id="ipv4-list-container" style="display:block">
                 <div class="table-responsive">
                     <table class="table modern-table mb-0">
                         <thead>
                             <tr>
                                 <th style="width:50%">
-                                    <i class="fas fa-globe"></i>公网IPv6地址
+                                    <i class="fas fa-network-wired"></i>公网IPv4地址
                                 </th>
                                 <th style="width:25%">
                                     <i class="fas fa-comment-alt"></i>描述信息
@@ -255,7 +254,7 @@
                                 </th>
                             </tr>
                         </thead>
-                        <tbody id="ipv6-tbody">
+                        <tbody id="ipv4-tbody">
                             <tr class="loading-row">
                                 <td colspan="4" class="text-center py-4">
                                     <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
@@ -268,22 +267,22 @@
         </div>
     </div>
 
-    <div class="modal fade" id="addIPv6Modal" tabindex="-1" role="dialog">
+    <div class="modal fade" id="addIPv4Modal" tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="fas fa-plus-circle text-primary mr-2"></i>绑定独立IPv6地址
+                        <i class="fas fa-plus-circle text-primary mr-2"></i>绑定独立IPv4地址
                     </h5>
                     <button type="button" class="close" data-dismiss="modal" onclick="closeAddModal()">
                         <span>&times;</span>
                     </button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-success mb-3">
-                        <i class="fas fa-info-circle mr-1"></i><strong>功能说明:</strong> 系统将分配一个独立的公网IPv6地址
+                    <div class="alert alert-primary mb-3">
+                        <i class="fas fa-info-circle mr-1"></i><strong>功能说明:</strong> 系统将分配一个独立的公网IPv4地址
                     </div>
-                    <form id="addIPv6Form">
+                    <form id="addIPv4Form">
                         <div class="form-group">
                             <label>
                                 <i class="fas fa-server mr-1"></i>容器名称
@@ -291,12 +290,12 @@
                             <input type="text" class="form-control" value="{$container_name}" disabled>
                         </div>
                         <div class="form-group">
-                            <label for="ipv6Description">
+                            <label for="ipv4Description">
                                 <i class="fas fa-comment mr-1"></i>描述信息 (可选)
                             </label>
-                            <input name="description" type="text" class="form-control" id="ipv6Description" 
+                            <input name="description" type="text" class="form-control" id="ipv4Description" 
                                    placeholder="请输入绑定描述">
-                            <small class="form-text text-muted">为该IPv6绑定添加描述信息，方便管理</small>
+                            <small class="form-text text-muted">为该IPv4绑定添加描述信息，方便管理</small>
                         </div>
                     </form>
                 </div>
@@ -304,7 +303,7 @@
                     <button type="button" class="btn btn-secondary btn-sm mr-2" data-dismiss="modal" onclick="closeAddModal()">
                         <i class="fas fa-times mr-1"></i>取消
                     </button>
-                    <button type="button" class="btn btn-primary btn-sm confirm-btn-ipv6">
+                    <button type="button" class="btn btn-primary btn-sm confirm-btn-ipv4">
                         <i class="fas fa-check mr-1"></i>确认绑定
                     </button>
                 </div>
@@ -322,16 +321,16 @@
             <div class="row">
                 <div class="col-md-6">
                     <ul class="list-unstyled">
-                        <li class="mb-2"><i class="fas fa-globe text-primary mr-2"></i><strong>公网IPv6:</strong> 系统分配的独立公网地址</li>
-                        <li class="mb-2"><i class="fas fa-server text-success mr-2"></i><strong>容器IPv6:</strong> 容器内部的IPv6地址</li>
-                        <li class="mb-2"><i class="fas fa-link text-info mr-2"></i><strong>自动转发:</strong> 所有流量自动转发到容器</li>
+                        <li class="mb-2"><i class="fas fa-network-wired text-primary mr-2"></i><strong>公网IPv4:</strong> 系统分配的独立公网地址</li>
+                        <li class="mb-2"><i class="fas fa-server text-primary mr-2"></i><strong>容器IPv4:</strong> 容器内部的IPv4地址</li>
+                        <li class="mb-2"><i class="fas fa-link text-info mr-2"></i><strong>自动路由:</strong> 所有流量自动路由到容器</li>
                     </ul>
                 </div>
                 <div class="col-md-6">
                     <ul class="list-unstyled">
-                        <li class="mb-2"><i class="fas fa-copy text-warning mr-2"></i>点击IPv6地址可复制到剪贴板</li>
-                        <li class="mb-2"><i class="fas fa-trash text-danger mr-2"></i>删除绑定将立即停止转发</li>
-                        <li class="mb-2"><i class="fas fa-shield-alt text-secondary mr-2"></i>容器IPv6地址绑定有数量限制</li>
+                        <li class="mb-2"><i class="fas fa-copy text-warning mr-2"></i>点击IPv4地址可复制到剪贴板</li>
+                        <li class="mb-2"><i class="fas fa-trash text-danger mr-2"></i>删除绑定将立即停止路由</li>
+                        <li class="mb-2"><i class="fas fa-shield-alt text-secondary mr-2"></i>容器IPv4地址绑定有数量限制</li>
                     </ul>
                 </div>
             </div>
@@ -343,28 +342,28 @@
 var currentContainerId = '';
 var MODULE_API_URL = "{$MODULE_CUSTOM_API}";
 var currentContainerName = '{$container_name}';
-var ipv6Limit = {$ipv6_limit};
-var currentIPv6Count = 0;
-var ipv6AllowDelete = {if condition="$ipv6_allow_delete"}true{else/}false{/if};
+var ipv4Limit = {$ipv4_limit};
+var currentIPv4Count = 0;
+var ipv4AllowDelete = {if condition="$ipv4_allow_delete"}true{else/}false{/if};
 
 $(document).ready(function() {
     const urlParams = new URLSearchParams(window.location.search);
     const containerId = urlParams.get('id');
     if (containerId) {
         currentContainerId = containerId;
-        fetchIPv6List();
-        setInterval(fetchIPv6List, 30000);
+        fetchIPv4List();
+        setInterval(fetchIPv4List, 30000);
     }
 });
 
-function fetchIPv6List() {
+function fetchIPv4List() {
     if (!currentContainerId) return;
     
     const timestamp = new Date().getTime();
-    const ipv6ListUrl = `/provision/custom/content?id=${currentContainerId}&key=ipv6_acl&action=ipv6list&_t=${timestamp}`;
+    const ipv4ListUrl = `/provision/custom/content?id=${currentContainerId}&key=ipv4_acl&action=ipv4list&_t=${timestamp}`;
 
     $.ajax({
-        url: ipv6ListUrl,
+        url: ipv4ListUrl,
         method: 'GET',
         dataType: 'json',
         timeout: 10000,
@@ -372,14 +371,14 @@ function fetchIPv6List() {
         success: function(resp) {
             if (resp && resp.data && resp.data.list && Array.isArray(resp.data.list)) {
                 const list = resp.data.list;
-                const $empty = $('#ipv6-empty-state');
-                const $listContainer = $('#ipv6-list-container');
-                const $tbody = $('#ipv6-tbody');
+                const $empty = $('#ipv4-empty-state');
+                const $listContainer = $('#ipv4-list-container');
+                const $tbody = $('#ipv4-tbody');
                 
                 if (list.length === 0) {
                     $empty.show();
                     $listContainer.hide();
-                    updateIPv6Counters(0);
+                    updateIPv4Counters(0);
                 } else {
                     $empty.hide();
                     $listContainer.show();
@@ -389,7 +388,7 @@ function fetchIPv6List() {
                     setTimeout(function() {
                         let html = '';
                         list.forEach(function(item) {
-                            const publicIPv6 = item.public_ipv6 || '';
+                            const publicIPv4 = item.public_ipv4 || '';
                             const status = item.status || 'active';
                             const description = item.description || '';
                             
@@ -404,53 +403,52 @@ function fetchIPv6List() {
                             if (description && description.trim() !== '') {
                                 descriptionDisplay = '<div class="description-text" title="' + description + '">' + description + '</div>';
                             } else {
-                                const ipv6Short = publicIPv6.includes('::') ? publicIPv6 : publicIPv6.substring(0, 20) + '...';
-                                const autoDescription = `独立IPv6地址 (${ipv6Short})`;
+                                const autoDescription = `独立IPv4地址 (${publicIPv4})`;
                                 descriptionDisplay = '<div class="description-text text-muted" title="' + autoDescription + '" style="font-style: italic;">' + autoDescription + '</div>';
                             }
                             
                             let actionButton = '';
-                            if (ipv6AllowDelete) {
-                                actionButton = '<button class="btn action-btn delete-ipv6-btn" data-ipv6="' + publicIPv6 + '" title="删除此IPv6绑定"><i class="fas fa-trash-alt"></i></button>';
+                            if (ipv4AllowDelete) {
+                                actionButton = '<button class="btn action-btn delete-ipv4-btn" data-ipv4="' + publicIPv4 + '" title="删除此IPv4绑定"><i class="fas fa-trash-alt"></i></button>';
                             } else {
                                 actionButton = '<button class="btn btn-secondary btn-sm" disabled title="管理员已禁止删除IP"><i class="fas fa-lock"></i></button>';
                             }
                             
                             html += '<tr>' +
-                                    '<td><div class="ipv6-address" onclick="copyToClipboard(\'' + publicIPv6 + '\')" title="点击复制IPv6地址">' + publicIPv6 + '</div></td>' +
+                                    '<td><div class="ipv4-address" onclick="copyToClipboard(\'' + publicIPv4 + '\')" title="点击复制IPv4地址">' + publicIPv4 + '</div></td>' +
                                     '<td>' + descriptionDisplay + '</td>' +
                                     '<td>' + statusBadge + '</td>' +
                                     '<td>' + actionButton + '</td>' +
                                     '</tr>';
                         });
                         $tbody.html(html);
-                        updateIPv6Counters(list.length);
+                        updateIPv4Counters(list.length);
                     }, 300);
                 }
             }
         },
         error: function(xhr, status, error) {
-            console.error('IPv6列表获取失败:', error);
+            console.error('IPv4列表获取失败:', error);
         }
     });
 }
 
-function updateIPv6Counters(count) {
-    currentIPv6Count = count;
-    const remainingCount = Math.max(0, ipv6Limit - count);
+function updateIPv4Counters(count) {
+    currentIPv4Count = count;
+    const remainingCount = Math.max(0, ipv4Limit - count);
     
-    $('#current-ipv6-count').text(count);
-    $('#remaining-ipv6-count').text(remainingCount);
+    $('#current-ipv4-count').text(count);
+    $('#remaining-ipv4-count').text(remainingCount);
     
-    const $addBtn = $('#add-ipv6-btn');
-    if (count >= ipv6Limit) {
+    const $addBtn = $('#add-ipv4-btn');
+    if (count >= ipv4Limit) {
         $addBtn.prop('disabled', true);
         $addBtn.html('<i class="fas fa-ban mr-1"></i>已达限制');
         $addBtn.removeClass('btn-create').addClass('btn-secondary btn-sm');
-        $addBtn.attr('title', `IPv6绑定数量已达到限制（${ipv6Limit}个）`);
+        $addBtn.attr('title', `IPv4绑定数量已达到限制（${ipv4Limit}个）`);
     } else {
         $addBtn.prop('disabled', false);
-        $addBtn.html('<i class="fas fa-plus mr-1"></i>绑定IPv6');
+        $addBtn.html('<i class="fas fa-plus mr-1"></i>绑定IPv4');
         $addBtn.removeClass('btn-secondary').addClass('btn-create btn-sm');
         $addBtn.attr('title', '');
     }
@@ -462,7 +460,7 @@ function copyToClipboard(text) {
             Swal.fire({
                 type: 'success',
                 title: '复制成功',
-                text: 'IPv6地址已复制到剪贴板: ' + text,
+                text: 'IPv4地址已复制到剪贴板: ' + text,
                 timer: 2000,
                 showConfirmButton: false
             });
@@ -485,7 +483,7 @@ function fallbackCopyTextToClipboard(text) {
         Swal.fire({
             type: 'success',
             title: '复制成功',
-            text: 'IPv6地址已复制到剪贴板: ' + text,
+            text: 'IPv4地址已复制到剪贴板: ' + text,
             timer: 2000,
             showConfirmButton: false
         });
@@ -499,29 +497,29 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
 }
 
-function refreshIPv6List() {
-    fetchIPv6List();
+function refreshIPv4List() {
+    fetchIPv4List();
 }
 
 function closeAddModal() {
     setTimeout(function() {
-        const formEl = document.getElementById('addIPv6Form');
+        const formEl = document.getElementById('addIPv4Form');
         if (formEl) formEl.reset();
     }, 150);
 }
 
-// 删除IPv6绑定
-$(document).on('click', '.delete-ipv6-btn', function (e) {
+// 删除IPv4绑定
+$(document).on('click', '.delete-ipv4-btn', function (e) {
     e.preventDefault();
     if ($(this).data('disabled') == 'true') return;
 
-    const delete_ipv6_btn = $(this);
-    const publicIPv6 = delete_ipv6_btn.data('ipv6');
+    const delete_ipv4_btn = $(this);
+    const publicIPv4 = delete_ipv4_btn.data('ipv4');
 
     Swal.fire({
         type: 'warning',
-        title: '删除IPv6绑定',
-        html: `<div class="text-muted">公网IPv6地址: <span class="badge badge-primary">${publicIPv6}</span></div>`,
+        title: '删除IPv4绑定',
+        html: `<div class="text-muted">公网IPv4地址: <span class="badge badge-primary">${publicIPv4}</span></div>`,
         showCancelButton: true,
         reverseButtons: true,
         buttonsStyling: false,
@@ -534,17 +532,17 @@ $(document).on('click', '.delete-ipv6-btn', function (e) {
         cancelButtonText: '取消'
     }).then((result) => {
         if (result.value) {
-            delete_ipv6_btn.data('orig-html', delete_ipv6_btn.html());
-            delete_ipv6_btn.html('<i class="fas fa-circle-notch fa-spin"></i>');
-            delete_ipv6_btn.data('disabled', 'true');
+            delete_ipv4_btn.data('orig-html', delete_ipv4_btn.html());
+            delete_ipv4_btn.html('<i class="fas fa-circle-notch fa-spin"></i>');
+            delete_ipv4_btn.data('disabled', 'true');
 
             ajax({
                 type: 'post',
                 url: MODULE_API_URL,
-                data: { func: 'ipv6del', public_ipv6: publicIPv6 },
+                data: { func: 'ipv4del', public_ipv4: publicIPv4 },
                 success: function (data) {
-                    delete_ipv6_btn.html(delete_ipv6_btn.data('orig-html') || '删除');
-                    delete_ipv6_btn.data('disabled', 'false');
+                    delete_ipv4_btn.html(delete_ipv4_btn.data('orig-html') || '删除');
+                    delete_ipv4_btn.data('disabled', 'false');
                     
                     const isSuccess = data.status === 200 || data.status === '200' ||
                                     data.code === 200 || data.code === '200' ||
@@ -554,11 +552,11 @@ $(document).on('click', '.delete-ipv6-btn', function (e) {
                         Swal.fire({
                             type: 'success',
                             title: '删除成功',
-                            text: data.msg || data.message || 'IPv6绑定删除成功',
+                            text: data.msg || data.message || 'IPv4绑定删除成功',
                             timer: 2000,
                             showConfirmButton: false
                         });
-                        fetchIPv6List();
+                        fetchIPv4List();
                     } else {
                         Swal.fire({
                             type: 'error',
@@ -568,8 +566,8 @@ $(document).on('click', '.delete-ipv6-btn', function (e) {
                     }
                 },
                 error: function (xhrStatus, errorData) {
-                    delete_ipv6_btn.html(delete_ipv6_btn.data('orig-html') || '删除');
-                    delete_ipv6_btn.data('disabled', 'false');
+                    delete_ipv4_btn.html(delete_ipv4_btn.data('orig-html') || '删除');
+                    delete_ipv4_btn.data('disabled', 'false');
                     
                     Swal.fire({
                         type: 'error',
@@ -582,8 +580,8 @@ $(document).on('click', '.delete-ipv6-btn', function (e) {
     });
 });
 
-// 添加IPv6绑定
-$('.confirm-btn-ipv6').on('click', function () {
+// 添加IPv4绑定
+$('.confirm-btn-ipv4').on('click', function () {
     if (!currentContainerName) {
         Swal.fire({
             type: 'error',
@@ -593,11 +591,11 @@ $('.confirm-btn-ipv6').on('click', function () {
         return;
     }
 
-    if (currentIPv6Count >= ipv6Limit) {
+    if (currentIPv4Count >= ipv4Limit) {
         Swal.fire({
             type: 'warning',
-            title: 'IPv6绑定数量已达限制',
-            text: `您的容器最多只能创建 ${ipv6Limit} 个IPv6绑定`,
+            title: 'IPv4绑定数量已达限制',
+            text: `您的容器最多只能创建 ${ipv4Limit} 个IPv4绑定`,
             confirmButtonText: '我知道了'
         });
         return;
@@ -612,7 +610,7 @@ $('.confirm-btn-ipv6').on('click', function () {
         ajax({
             type: 'post',
             url: MODULE_API_URL,
-            data: $('#addIPv6Form').serialize() + '&func=ipv6add',
+            data: $('#addIPv4Form').serialize() + '&func=ipv4add',
             success: function (data) {
                 current_button.html(current_button.data('orig-html') || '确认绑定');
                 current_button.data('submit', '');
@@ -634,15 +632,15 @@ $('.confirm-btn-ipv6').on('click', function () {
                     Swal.fire({
                         type: 'success',
                         title: '绑定成功',
-                        text: data.msg || data.message || 'IPv6绑定添加成功',
+                        text: data.msg || data.message || 'IPv4绑定添加成功',
                         timer: 2000,
                         showConfirmButton: false
                     });
 
-                    $('#addIPv6Modal').modal('hide');
+                    $('#addIPv4Modal').modal('hide');
                     closeAddModal();
                     setTimeout(function() {
-                        fetchIPv6List();
+                        fetchIPv4List();
                     }, 100);
                 } else {
                     Swal.fire({
@@ -701,7 +699,7 @@ function ajax(options) {
         } else if (xhr.readyState == 4 && xhr.status != 200) {
             try {
                 var parsedErrorData = JSON.parse(xhr.responseText);
-                options.error && options.error(xhr.status, parsedErrorData);
+                options.error && options.error(xhr.status, parsedErrorErrorData);
             } catch (e) {
                 options.error && options.error(xhr.status, xhr.responseText);
             }
@@ -709,3 +707,4 @@ function ajax(options) {
     };
 }
 </script>
+

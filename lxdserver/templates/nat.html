@@ -111,6 +111,12 @@
     border: 1px solid #ce93d8;
 }
 
+.protocol-both {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #90caf9;
+}
+
 /* 状态标签简化 */
 .status-badge {
     padding: 4px 12px;
@@ -332,60 +338,121 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-success mb-3">
+                    <div class="alert alert-primary mb-3">
                         <i class="fas fa-info-circle mr-1"></i><strong>功能说明:</strong> 配置端口转发规则，通过外网端口访问容器内部服务
                     </div>
-                    <form id="addNatForm">
-                        <div class="form-group">
-                            <label for="sportinput">
-                                <i class="fas fa-server mr-1"></i>内网端口
+                    
+                    <div class="form-group">
+                        <label><i class="fas fa-cog mr-1"></i>映射模式</label>
+                        <div class="btn-group btn-group-toggle d-flex" data-toggle="buttons">
+                            <label class="btn btn-outline-primary active flex-fill">
+                                <input type="radio" name="port_mode" id="single_port" value="single" checked> 
+                                <i class="fas fa-circle mr-1"></i>单端口
                             </label>
-                            <input required name="sport" type="number" class="form-control" min="1" max="65535"
-                                   id="sportinput" placeholder="请输入内部端口(1-65535)">
-                            <div class="invalid-feedback" id="internalPort-feedbacklxdserveracl"></div>
-                            <small class="form-text text-muted">容器内部服务监听的端口</small>
+                            <label class="btn btn-outline-primary flex-fill">
+                                <input type="radio" name="port_mode" id="range_port" value="range"> 
+                                <i class="fas fa-layer-group mr-1"></i>端口段
+                            </label>
                         </div>
+                        <small class="form-text text-muted">单端口：映射一个端口；端口段：批量映射连续端口</small>
+                    </div>
+                    
+                    <form id="addNatForm">
+                        <!-- 单端口模式 -->
+                        <div id="single-port-fields">
+                            <div class="form-group">
+                                <label for="sportinput">
+                                    <i class="fas fa-server mr-1"></i>内网端口
+                                </label>
+                                <input required name="sport" type="number" class="form-control" min="1" max="65535"
+                                       id="sportinput" placeholder="请输入内部端口(1-65535)">
+                                <div class="invalid-feedback" id="internalPort-feedbacklxdserveracl"></div>
+                                <small class="form-text text-muted">容器内部服务监听的端口</small>
+                            </div>
 
-                        <div class="form-group">
-                            <label for="dportinput">
-                                <i class="fas fa-globe mr-1"></i>外网端口
-                            </label>
-                            <div class="input-group">
-                                <input name="dport" type="number" class="form-control" min="10000" max="65535"
-                                       id="dportinput" placeholder="留空自动分配 (10000-65535)">
-                                <div class="input-group-append">
-                                    <button class="btn btn-outline-secondary" type="button" id="check-dport-btn">
-                                        <i class="fas fa-search mr-1"></i>检测
-                                    </button>
+                            <div class="form-group">
+                                <label for="dportinput">
+                                    <i class="fas fa-globe mr-1"></i>外网端口
+                                </label>
+                                <div class="input-group">
+                                    <input name="dport" type="number" class="form-control" min="10000" max="65535"
+                                           id="dportinput" placeholder="留空自动分配 (10000-65535)">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="check-dport-btn">
+                                            <i class="fas fa-search mr-1"></i>检测
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="invalid-feedback" id="externalPort-feedback"></div>
+                                <small class="form-text text-muted">可自定义外网端口范围 10000-65535，不填写则由系统随机分配。</small>
+                                <div class="mt-1 small" id="externalPort-status" style="display:none;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 端口段模式 -->
+                        <div id="range-port-fields" style="display:none;">
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="sport_start">
+                                        <i class="fas fa-server mr-1"></i>内网起始端口
+                                    </label>
+                                    <input name="sport_start" type="number" class="form-control" min="1" max="65535"
+                                           id="sport_start" placeholder="起始端口">
+                                    <small class="form-text text-muted">范围: 1-65535</small>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label for="sport_end">
+                                        <i class="fas fa-server mr-1"></i>内网结束端口
+                                    </label>
+                                    <input name="sport_end" type="number" class="form-control" min="1" max="65535"
+                                           id="sport_end" placeholder="结束端口">
+                                    <small class="form-text text-muted">范围: 1-65535</small>
                                 </div>
                             </div>
-                            <div class="invalid-feedback" id="externalPort-feedback"></div>
-                            <small class="form-text text-muted">可自定义外网端口范围 10000-65535，不填写则由系统随机分配。</small>
-                            <div class="mt-1 small" id="externalPort-status" style="display:none;"></div>
+                            
+                            <div class="form-row">
+                                <div class="form-group col-md-6">
+                                    <label for="dport_start">
+                                        <i class="fas fa-globe mr-1"></i>外网起始端口
+                                    </label>
+                                    <input name="dport_start" type="number" class="form-control" min="10000" max="65535"
+                                           id="dport_start" placeholder="起始端口">
+                                    <small class="form-text text-muted">范围: 10000-65535</small>
+                                </div>
+                                <div class="form-group col-md-6">
+                                    <label for="dport_end">
+                                        <i class="fas fa-globe mr-1"></i>外网结束端口
+                                    </label>
+                                    <input name="dport_end" type="number" class="form-control" min="10000" max="65535"
+                                           id="dport_end" placeholder="结束端口">
+                                    <small class="form-text text-muted">范围: 10000-65535</small>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-warning mb-3" id="port-range-info">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                <strong>注意：</strong>端口段数量会占用多条NAT规则配额
+                            </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="protocolSelect">
+                            <label>
                                 <i class="fas fa-network-wired mr-1"></i>协议类型
                             </label>
                             {if $udp_enabled}
-                            <div class="selectItem">
-                                <div class="protocol nokvmprotocollxdserveracl">
-                                    <div class="filter-text">
-                                        <input class="filter-title" type="text" readonly placeholder="TCP" />
-                                        <i class="icon icon-filter-arrow"></i>
-                                    </div>
-                                    <select name="dtype" id="protocolSelect">
-                                        <option value="tcp" selected>TCP</option>
-                                        <option value="udp">UDP</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <small class="form-text text-muted">TCP 适用于 HTTP/HTTPS/SSH 等服务，UDP 适用于 DNS/游戏 等服务</small>
+                            <input type="text" class="form-control" value="TCP + UDP（双协议）" disabled>
+                            <input name="dtype" type="hidden" value="both">
+                            <small class="form-text text-muted">
+                                <i class="fas fa-check-circle text-success mr-1"></i>
+                                自动支持TCP和UDP双协议，一条规则同时支持两种协议
+                            </small>
                             {else}
                             <input type="text" class="form-control" value="TCP" disabled>
                             <input name="dtype" type="hidden" value="tcp">
-                            <small class="form-text text-muted">TCP 适用于 HTTP/HTTPS/SSH 等服务</small>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle text-primary mr-1"></i>
+                                仅支持TCP协议（管理员未启用UDP）
+                            </small>
                             {/if}
                         </div>
                         
@@ -422,15 +489,22 @@
                 <div class="col-md-6">
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="fas fa-server text-primary mr-2"></i><strong>内网端口:</strong> 容器内部服务端口</li>
-                        <li class="mb-2"><i class="fas fa-globe text-success mr-2"></i><strong>外网端口:</strong> 外部访问端口</li>
-                        <li class="mb-2"><i class="fas fa-network-wired text-info mr-2"></i><strong>协议类型:</strong> {if $udp_enabled}TCP/UDP 协议{else}TCP 协议{/if}</li>
+                        <li class="mb-2"><i class="fas fa-globe text-success mr-2"></i><strong>外网端口:</strong> 外部访问端口（10000-65535）</li>
+                        {if $udp_enabled}
+                        <li class="mb-2"><i class="fas fa-check-double text-info mr-2"></i><strong>双协议:</strong> 一条规则同时支持TCP和UDP</li>
+                        {else}
+                        <li class="mb-2"><i class="fas fa-network-wired text-info mr-2"></i><strong>协议类型:</strong> 仅支持TCP协议</li>
+                        {/if}
                     </ul>
                 </div>
                 <div class="col-md-6">
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="fas fa-link text-warning mr-2"></i>通过 <code>服务器IP:外网端口</code> 访问服务</li>
+                        {if $udp_enabled}
+                        <li class="mb-2"><i class="fas fa-lightbulb text-success mr-2"></i>无需分别创建TCP和UDP，节省配额</li>
+                        {/if}
                         <li class="mb-2"><i class="fas fa-trash text-danger mr-2"></i>删除规则将立即停止端口转发</li>
-                        <li class="mb-2"><i class="fas fa-broom text-secondary mr-2"></i>建议定期清理不需要的规则</li>
+                        <li class="mb-2"><i class="fas fa-layer-group text-primary mr-2"></i>支持端口段批量映射功能</li>
                     </ul>
                 </div>
             </div>
@@ -541,10 +615,6 @@ $(document).ready(function() {
     getContainerInfo(containerId);
     fetchNATList();
     setInterval(fetchNATList, 30000);
-    
-    if (udpEnabled) {
-        $('.nokvmprotocollxdserveracl').selectFilter({});
-    }
 
     $('#check-dport-btn').on('click', function () {
         triggerPortCheck();
@@ -557,6 +627,23 @@ $(document).ready(function() {
     $('#addModallxdserveracl').on('hidden.bs.modal', function () {
         clearExternalPortFeedback();
         lastPortCheckValue = '';
+    });
+    
+    // 端口模式切换
+    $('input[name="port_mode"]').on('change', function() {
+        const mode = $(this).val();
+        if (mode === 'single') {
+            $('#single-port-fields').show();
+            $('#range-port-fields').hide();
+            // 清空端口段字段
+            $('#sport_start, #sport_end, #dport_start, #dport_end').val('');
+        } else {
+            $('#single-port-fields').hide();
+            $('#range-port-fields').show();
+            // 清空单端口字段
+            $('#sportinput, #dportinput').val('');
+            clearExternalPortFeedback();
+        }
     });
 });
 
@@ -601,8 +688,8 @@ function fetchNATList() {
             const $listContainer = $('#nat-list-container');
             const $tbody = $('#nat-tbody');
 
-            if (resp && resp.data && Array.isArray(resp.data)) {
-                const list = resp.data;
+            if (resp && resp.data && resp.data.list && Array.isArray(resp.data.list)) {
+                const list = resp.data.list;
 
                 if (list.length === 0) {
                     $empty.show();
@@ -631,6 +718,8 @@ function fetchNATList() {
                             protocolBadge = '<span class="protocol-badge protocol-tcp"><i class="fas fa-shield-alt mr-1"></i>TCP</span>';
                         } else if (dtype === 'udp') {
                             protocolBadge = '<span class="protocol-badge protocol-udp"><i class="fas fa-broadcast-tower mr-1"></i>UDP</span>';
+                        } else if (dtype === 'both') {
+                            protocolBadge = '<span class="protocol-badge protocol-both"><i class="fas fa-network-wired mr-1"></i>TCP+UDP</span>';
                         } else {
                             protocolBadge = '<span class="protocol-badge protocol-other">' + (dtype || 'TCP').toUpperCase() + '</span>';
                         }
@@ -796,6 +885,88 @@ $('.confirm-btnlxdserveracl').on('click', function () {
         return;
     }
 
+    // 获取当前模式
+    const portMode = $('input[name="port_mode"]:checked').val();
+    
+    // 端口段模式验证
+    if (portMode === 'range') {
+        const sportStart = parseInt($('#sport_start').val());
+        const sportEnd = parseInt($('#sport_end').val());
+        const dportStart = parseInt($('#dport_start').val());
+        const dportEnd = parseInt($('#dport_end').val());
+        
+        if (!sportStart || !sportEnd || !dportStart || !dportEnd) {
+            Swal.fire({
+                type: 'error',
+                title: '参数错误',
+                text: '端口段模式下必须填写所有端口（起始和结束）'
+            });
+            return;
+        }
+        
+        if (sportStart > sportEnd) {
+            Swal.fire({
+                type: 'error',
+                title: '参数错误',
+                text: '内网起始端口不能大于结束端口'
+            });
+            return;
+        }
+        
+        if (dportStart > dportEnd) {
+            Swal.fire({
+                type: 'error',
+                title: '参数错误',
+                text: '外网起始端口不能大于结束端口'
+            });
+            return;
+        }
+        
+        const internalRange = sportEnd - sportStart + 1;
+        const externalRange = dportEnd - dportStart + 1;
+        
+        if (internalRange !== externalRange) {
+            Swal.fire({
+                type: 'error',
+                title: '端口范围不匹配',
+                text: '内网和外网端口范围大小必须一致'
+            });
+            return;
+        }
+        
+        // 检查端口段数量是否超过限制
+        if (currentCount + internalRange > natLimit) {
+            Swal.fire({
+                type: 'warning',
+                title: 'NAT规则数量将超出限制',
+                text: `端口段包含 ${internalRange} 个端口，将占用 ${internalRange} 条规则，但您只剩余 ${natLimit - currentCount} 条配额`,
+                confirmButtonText: '我知道了'
+            });
+            return;
+        }
+        
+        // 端口段提示
+        Swal.fire({
+            type: 'info',
+            title: '确认添加端口段',
+            html: `<div class="text-left">
+                <p><strong>内网端口段：</strong>${sportStart} - ${sportEnd}</p>
+                <p><strong>外网端口段：</strong>${dportStart} - ${dportEnd}</p>
+                <p><strong>端口数量：</strong>${internalRange} 个</p>
+                <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> 将占用 ${internalRange} 条NAT规则配额</p>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonText: '确认添加',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.value) {
+                submitNATForm(portMode);
+            }
+        });
+        return;
+    }
+    
+    // 单端口模式验证（原有逻辑）
     if (currentCount >= natLimit) {
         Swal.fire({
             type: 'warning',
@@ -841,34 +1012,34 @@ $('.confirm-btnlxdserveracl').on('click', function () {
         }
     }
 
-    let dtypeVal = 'tcp';
-    if (udpEnabled) {
-        const dtypeSelect = document.querySelector("select[name='dtype']");
-        dtypeVal = dtypeSelect ? dtypeSelect.value : 'tcp';
-        if (!dtypeVal || !['tcp', 'udp'].includes(dtypeVal)) {
-            Swal.fire({
-                type: 'error',
-                title: '协议类型无效',
-                text: '请选择有效的协议类型（TCP 或 UDP）'
-            });
-            return;
-        }
+    submitNATForm(portMode);
+});
+
+// 提取表单提交逻辑
+function submitNATForm(portMode) {
+    const current_button = $('.confirm-btnlxdserveracl');
+    
+    if (current_button.data('submit')) {
+        return;
     }
+    
+    current_button.data('orig-html', current_button.html());
+    current_button.html('<i class="fas fa-circle-notch fa-spin"></i>');
+    current_button.data('submit', 'submit');
 
-    if (!$(this).data('submit')) {
-        var current_button = $(this);
-        current_button.data('orig-html', current_button.html());
-        current_button.html('<i class="fas fa-circle-notch fa-spin"></i>');
-        current_button.data('submit', 'submit');
-
-        const formData = $('#addModallxdserveracl').find('form').serialize();
-        ajax({
-            type: 'post',
-            url: MODULE_API_URL,
-            data: formData + '&func=natadd',
-            success: function (data) {
-                current_button.html(current_button.data('orig-html') || '确认');
-                current_button.data('submit', '');
+    let formData = $('#addModallxdserveracl').find('form').serialize();
+    
+    // 添加模式参数
+    formData += '&port_mode=' + portMode;
+    formData += '&func=natadd';
+    
+    ajax({
+        type: 'post',
+        url: MODULE_API_URL,
+        data: formData,
+        success: function (data) {
+            current_button.html(current_button.data('orig-html') || '确认');
+            current_button.data('submit', '');
 
                 if (!data || typeof data !== 'object') {
                     Swal.fire({
