@@ -673,49 +673,70 @@ echo
 echo "==== 步骤 5/5: 网络管理方案 ===="
 echo
 echo "请选择网络模式："
-echo "1. IPv4 NAT (基础模式)"
-echo "2. IPv4 NAT + IPv6 NAT (双栈 NAT)"
-echo "3. IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
-echo "4. IPv4 NAT + IPv6 独立绑定 (混合模式)"
-echo "5. IPv6 独立绑定 (纯 IPv6 公网 模式)"
+echo "1. IPv4 NAT共享"
+echo "2. IPv6 NAT共享"
+echo "3. IPv4/IPv6 NAT共享 (双栈)"
+echo "4. IPv4 NAT共享 + IPv6独立"
+echo "5. IPv4独立"
+echo "6. IPv6独立"
+echo "7. IPv4独立 + IPv6独立"
 echo
-read -p "请选择网络模式 [1-5]: " NETWORK_MODE
+read -p "请选择网络模式 [1-7]: " NETWORK_MODE
 
-while [[ ! $NETWORK_MODE =~ ^[1-5]$ ]]; do
-  warn "无效选择，请输入 1-5"
-  read -p "请选择网络模式 [1-5]: " NETWORK_MODE
+while [[ ! $NETWORK_MODE =~ ^[1-7]$ ]]; do
+  warn "无效选择，请输入 1-7"
+  read -p "请选择网络模式 [1-7]: " NETWORK_MODE
 done
 
 case $NETWORK_MODE in
   1)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="false"
+    IPV4_BINDING_ENABLED="false"
     IPV6_BINDING_ENABLED="false"
-    ok "已选择: IPv4 NAT (基础模式)"
+    ok "已选择: 模式1 - IPv4 NAT共享"
     ;;
   2)
-    NAT_SUPPORT="true"
+    NAT_SUPPORT="false"
     IPV6_NAT_SUPPORT="true"
+    IPV4_BINDING_ENABLED="false"
     IPV6_BINDING_ENABLED="false"
-    ok "已选择: IPv4 NAT + IPv6 NAT (双栈 NAT)"
+    ok "已选择: 模式2 - IPv6 NAT共享"
     ;;
   3)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="true"
-    IPV6_BINDING_ENABLED="true"
-    ok "已选择: IPv4 NAT + IPv6 NAT + IPv6 独立绑定 (全功能模式)"
+    IPV4_BINDING_ENABLED="false"
+    IPV6_BINDING_ENABLED="false"
+    ok "已选择: 模式3 - IPv4/IPv6 NAT共享 (双栈)"
     ;;
   4)
     NAT_SUPPORT="true"
     IPV6_NAT_SUPPORT="false"
+    IPV4_BINDING_ENABLED="false"
     IPV6_BINDING_ENABLED="true"
-    ok "已选择: IPv4 NAT + IPv6 独立绑定 (混合模式)"
+    ok "已选择: 模式4 - IPv4 NAT共享 + IPv6独立"
     ;;
   5)
     NAT_SUPPORT="false"
     IPV6_NAT_SUPPORT="false"
+    IPV4_BINDING_ENABLED="true"
+    IPV6_BINDING_ENABLED="false"
+    ok "已选择: 模式5 - IPv4独立"
+    ;;
+  6)
+    NAT_SUPPORT="false"
+    IPV6_NAT_SUPPORT="false"
+    IPV4_BINDING_ENABLED="false"
     IPV6_BINDING_ENABLED="true"
-    ok "已选择: IPv6 独立绑定 (纯 IPv6 公网 模式)"
+    ok "已选择: 模式6 - IPv6独立"
+    ;;
+  7)
+    NAT_SUPPORT="false"
+    IPV6_NAT_SUPPORT="false"
+    IPV4_BINDING_ENABLED="true"
+    IPV6_BINDING_ENABLED="true"
+    ok "已选择: 模式7 - IPv4独立 + IPv6独立"
     ;;
 esac
 
@@ -738,6 +759,27 @@ else
   NETWORK_IPV6=""
 fi
 
+if [[ $IPV4_BINDING_ENABLED == "true" ]]; then
+  echo
+  echo "==== IPv4 独立绑定配置 ===="
+  read -p "IPv4 绑定网卡接口 [$DEFAULT_INTERFACE]: " IPV4_BINDING_INTERFACE
+  IPV4_BINDING_INTERFACE=${IPV4_BINDING_INTERFACE:-$DEFAULT_INTERFACE}
+  
+  while [[ -z "$IPV4_POOL_START" ]]; do
+    read -p "IPv4 地址池起始地址 (如: 192.168.1.100): " IPV4_POOL_START
+    if [[ -z "$IPV4_POOL_START" ]]; then
+      warn "IPv4 地址池起始地址不能为空，请重新输入"
+    fi
+  done
+  
+  read -p "IPv4 地址池大小 [100]: " IPV4_POOL_SIZE
+  IPV4_POOL_SIZE=${IPV4_POOL_SIZE:-100}
+else
+  IPV4_BINDING_INTERFACE=""
+  IPV4_POOL_START=""
+  IPV4_POOL_SIZE=""
+fi
+
 if [[ $IPV6_BINDING_ENABLED == "true" ]]; then
   echo
   echo "==== IPv6 独立绑定配置 ===="
@@ -750,9 +792,13 @@ if [[ $IPV6_BINDING_ENABLED == "true" ]]; then
       warn "IPv6 地址池起始地址不能为空，请重新输入"
     fi
   done
+  
+  read -p "IPv6 地址池大小 [1000]: " IPV6_POOL_SIZE
+  IPV6_POOL_SIZE=${IPV6_POOL_SIZE:-1000}
 else
   IPV6_BINDING_INTERFACE=""
   IPV6_POOL_START=""
+  IPV6_POOL_SIZE=""
 fi
 
 ok "网络配置完成"
@@ -880,9 +926,16 @@ replace_config_var "IPV6_NAT_SUPPORT" "$IPV6_NAT_SUPPORT"
 replace_config_var "NETWORK_EXTERNAL_INTERFACE" "$NETWORK_INTERFACE"
 replace_config_var "NETWORK_EXTERNAL_IPV4" "$NETWORK_IPV4"
 replace_config_var "NETWORK_EXTERNAL_IPV6" "$NETWORK_IPV6"
+
+replace_config_var "IPV4_BINDING_ENABLED" "$IPV4_BINDING_ENABLED"
+replace_config_var "IPV4_BINDING_INTERFACE" "$IPV4_BINDING_INTERFACE"
+replace_config_var "IPV4_POOL_START" "$IPV4_POOL_START"
+replace_config_var "IPV4_POOL_SIZE" "$IPV4_POOL_SIZE"
+
 replace_config_var "IPV6_BINDING_ENABLED" "$IPV6_BINDING_ENABLED"
 replace_config_var "IPV6_BINDING_INTERFACE" "$IPV6_BINDING_INTERFACE"
 replace_config_var "IPV6_POOL_START" "$IPV6_POOL_START"
+replace_config_var "IPV6_POOL_SIZE" "$IPV6_POOL_SIZE"
 
 replace_config_var "TRAFFIC_INTERVAL" "$TRAFFIC_INTERVAL"
 replace_config_var "TRAFFIC_BATCH_SIZE" "$TRAFFIC_BATCH_SIZE"
