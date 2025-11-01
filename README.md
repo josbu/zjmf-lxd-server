@@ -4,6 +4,10 @@
 
 **详细的安装和使用文档，请参考 [项目 Wiki](https://github.com/xkatld/zjmf-lxd-server/wiki)。**
 
+交流群：
+![4dc76129a768b6689bfd523139abcaa](https://github.com/user-attachments/assets/c9d362ff-789b-45ba-8e97-06c79980508c)
+
+
 ## 项目特色
 
 - 高性能Go后端服务 - 完整的容器管理功能 - IPv6独立绑定支持 - NAT端口转发（IPv4/IPv6双栈） - 流量监控与统计 - Web VNC控制台 - 安全的API认证 - 与魔方财务系统无缝集成
