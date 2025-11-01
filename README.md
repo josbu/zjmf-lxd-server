@@ -14,15 +14,14 @@
 
 ## 项目截图
 
-info页面
-<img width="1637" height="810" alt="image" src="https://github.com/user-attachments/assets/5001f198-57bd-44b0-8698-fe9d92a2a662" />
-
-nat页面
-<img width="1150" height="534" alt="image" src="https://github.com/user-attachments/assets/4ba28cc5-1d3d-45a8-9e1b-9ecb28294389" /><img width="518" height="593" alt="image" src="https://github.com/user-attachments/assets/9cc5e287-e275-4f6a-8813-e5d056c61f38" />
-
-ipv6页面
+info页面：
+<img width="1640" height="803" alt="image" src="https://github.com/user-attachments/assets/ccb07579-b2a1-42d2-9bab-4d6eaf94f376" />
+nat页面：
+<img width="541" height="741" alt="image" src="https://github.com/user-attachments/assets/bcae31ac-ea98-4258-9e2d-e6e10bf99fd7" /><img width="1631" height="834" alt="image" src="https://github.com/user-attachments/assets/2e9f44b9-6966-4566-ac4d-6086165637bd" />
+ipv6/ipv4页面：
 <img width="1162" height="514" alt="image" src="https://github.com/user-attachments/assets/a8caea46-b6d3-4a05-8d7e-33d465d910a5" /><img width="534" height="428" alt="image" src="https://github.com/user-attachments/assets/3972edcd-b8ac-435a-adac-c215aaa5494d" />
-
+代理页面：
+<img width="527" height="821" alt="image" src="https://github.com/user-attachments/assets/9693ef55-b0c6-43ae-bbd3-2071134532b1" />
 vnc页面
 <img width="1920" height="911" alt="image" src="https://github.com/user-attachments/assets/6093a9f8-ce35-4968-a028-8673519c0ba9" />
 
