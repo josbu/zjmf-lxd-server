@@ -16,14 +16,19 @@
 
 info页面：
 <img width="1640" height="803" alt="image" src="https://github.com/user-attachments/assets/ccb07579-b2a1-42d2-9bab-4d6eaf94f376" />
+
 nat页面：
 <img width="541" height="741" alt="image" src="https://github.com/user-attachments/assets/bcae31ac-ea98-4258-9e2d-e6e10bf99fd7" /><img width="1631" height="834" alt="image" src="https://github.com/user-attachments/assets/2e9f44b9-6966-4566-ac4d-6086165637bd" />
+
 ipv6/ipv4页面：
 <img width="1162" height="514" alt="image" src="https://github.com/user-attachments/assets/a8caea46-b6d3-4a05-8d7e-33d465d910a5" /><img width="534" height="428" alt="image" src="https://github.com/user-attachments/assets/3972edcd-b8ac-435a-adac-c215aaa5494d" />
+
 代理页面：
 <img width="527" height="821" alt="image" src="https://github.com/user-attachments/assets/9693ef55-b0c6-43ae-bbd3-2071134532b1" />
-vnc页面
+
+vnc页面：
 <img width="1920" height="911" alt="image" src="https://github.com/user-attachments/assets/6093a9f8-ce35-4968-a028-8673519c0ba9" />
 
-商品配置页面
-<img width="1183" height="616" alt="image" src="https://github.com/user-attachments/assets/6f0ba5ff-cf36-4eb0-a593-3f767a8d6d56" />
+商品配置页面：
+<img width="1235" height="635" alt="image" src="https://github.com/user-attachments/assets/66f21481-30e4-45f3-9234-90c37bbac9bf" />
+
