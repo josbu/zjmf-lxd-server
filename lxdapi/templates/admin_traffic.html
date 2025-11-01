@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 </head>
@@ -12,18 +13,127 @@
     
     <div class="container mx-auto px-4 py-8">
         <div class="mb-6">
-            <h1 class="text-3xl font-bold text-gray-800">流量统计</h1>
-            <p class="text-gray-600 mt-1">容器流量使用情况</p>
+            <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                <span class="iconify text-green-600" data-icon="mdi:chart-line" data-width="36"></span>
+                流量
+            </h1>
+            <p class="text-gray-600 mt-1">容器流量使用统计</p>
         </div>
 
-        <div class="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-            <span class="iconify" data-icon="mdi:chart-line" data-width="48"></span>
-            <p class="mt-4">流量统计功能可通过 API 接口查看</p>
-            <p class="mt-2 text-sm">请使用 <code class="bg-gray-100 px-2 py-1 rounded">/api/traffic</code> 接口获取流量数据</p>
+        <div class="flex justify-between items-center mb-6">
+            <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
+                刷新
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200" id="trafficTable">
+            <div class="p-8 text-center text-gray-500">
+                <span class="iconify animate-pulse" data-icon="mdi:loading" data-width="24"></span>
+                <p>加载中...</p>
+            </div>
         </div>
     </div>
 
     {{template "admin_footer.html" .}}
+
+    <script>
+        $(document).ready(function() {
+            loadTraffic();
+        });
+
+        async function loadTraffic() {
+            try {
+                const response = await fetch('/api/cache/containers', {
+                    headers: {
+                        'apikey': '{{ .api_key }}'
+                    }
+                });
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    renderTraffic(result.data);
+                } else {
+                    $('#trafficTable').html('<div class="p-8 text-center text-gray-500">暂无流量数据</div>');
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                $('#trafficTable').html('<div class="p-8 text-center text-red-500">加载失败</div>');
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function renderTraffic(containers) {
+            if (!containers || containers.length === 0) {
+                $('#trafficTable').html('<div class="p-8 text-center text-gray-500">暂无流量数据</div>');
+                return;
+            }
+
+            // 过滤出有流量数据的容器
+            const trafficData = containers.filter(c => c.traffic_usage_raw > 0 || c.traffic_limit_raw > 0);
+
+            if (trafficData.length === 0) {
+                $('#trafficTable').html('<div class="p-8 text-center text-gray-500">暂无流量数据</div>');
+                return;
+            }
+
+            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">已使用流量</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">流量限制</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">使用率</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">进度</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">更新时间</th>';
+            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+
+            trafficData.forEach(container => {
+                const used = container.traffic_usage_raw || 0;
+                const limit = container.traffic_limit_raw || 0;
+                const percentage = limit > 0 ? Math.min(Math.round((used / limit) * 100), 100) : 0;
+
+                // 状态标签
+                let statusBadge = '';
+                if (container.status === 'Running') {
+                    statusBadge = '<span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">运行中</span>';
+                } else if (container.status === 'Stopped') {
+                    statusBadge = '<span class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">已停止</span>';
+                } else {
+                    statusBadge = `<span class="px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-100 rounded">${container.status}</span>`;
+                }
+
+                // 进度条颜色
+                let progressColor = 'bg-blue-500';
+                if (percentage >= 90) progressColor = 'bg-red-500';
+                else if (percentage >= 75) progressColor = 'bg-yellow-500';
+                else if (percentage >= 50) progressColor = 'bg-orange-500';
+
+                html += `<tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                        <a href="/admin/containers/${container.hostname}" class="text-blue-600 hover:underline">${container.hostname}</a>
+                    </td>
+                    <td class="px-6 py-4">${statusBadge}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500"><code class="text-xs font-mono">${formatBytes(used)}</code></td>
+                    <td class="px-6 py-4 text-sm text-gray-500"><code class="text-xs font-mono">${limit > 0 ? formatBytes(limit) : '无限制'}</code></td>
+                    <td class="px-6 py-4 text-sm font-medium ${percentage >= 90 ? 'text-red-600' : percentage >= 75 ? 'text-yellow-600' : 'text-gray-900'}">${percentage}%</td>
+                    <td class="px-6 py-4">
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="${progressColor} h-2 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${container.last_update ? new Date(container.last_update).toLocaleString('zh-CN') : '-'}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            $('#trafficTable').html(html);
+        }
+    </script>
 </body>
 </html>
 
