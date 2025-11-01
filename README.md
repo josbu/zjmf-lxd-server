@@ -5,8 +5,7 @@
 **详细的安装和使用文档，请参考 [项目 Wiki](https://github.com/xkatld/zjmf-lxd-server/wiki)。**
 
 交流群：
-![4dc76129a768b6689bfd523139abcaa](https://github.com/user-attachments/assets/c9d362ff-789b-45ba-8e97-06c79980508c)
-
+<img width="150" height="265" alt="image" src="https://github.com/user-attachments/assets/a9e6e62c-7cb7-4a27-903a-89a1406e9da4" />
 
 ## 项目特色
 
