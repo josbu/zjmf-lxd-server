@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "admin_header.html" .}}
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">IPv6 绑定管理</h1>
+                <p class="text-gray-600 mt-1">管理容器 IPv6 地址绑定</p>
+            </div>
+            <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
+                刷新
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200" id="ipv6Table">
+            <div class="p-8 text-center text-gray-500">
+                <span class="iconify animate-pulse" data-icon="mdi:loading" data-width="24"></span>
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    {{template "admin_footer.html" .}}
+
+    <script>
+        $(document).ready(function() {
+            loadIPv6();
+        });
+
+        async function loadIPv6() {
+            try {
+                const response = await fetch('/api/cache/ipv6');
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    renderIPv6(result.data);
+                } else {
+                    $('#ipv6Table').html('<div class="p-8 text-center text-gray-500">暂无IPv6绑定</div>');
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                $('#ipv6Table').html('<div class="p-8 text-center text-red-500">加载失败</div>');
+            }
+        }
+
+        function renderIPv6(bindings) {
+            if (!bindings || bindings.length === 0) {
+                $('#ipv6Table').html('<div class="p-8 text-center text-gray-500">暂无IPv6绑定</div>');
+                return;
+            }
+
+            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IPv6地址</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
+            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+
+            bindings.forEach(binding => {
+                html += `<tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${binding.container_name || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${binding.ipv6_address || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${binding.created_at ? new Date(binding.created_at).toLocaleString('zh-CN') : '-'}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            $('#ipv6Table').html(html);
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "admin_header.html" .}}
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">任务列表</h1>
+            <p class="text-gray-600 mt-1">查看后台任务执行情况</p>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
+            <span class="iconify" data-icon="mdi:list-status" data-width="48"></span>
+            <p class="mt-4">任务管理功能</p>
+            <p class="mt-2 text-sm">任务队列系统正在运行中</p>
+        </div>
+    </div>
+
+    {{template "admin_footer.html" .}}
+</body>
+</html>
+

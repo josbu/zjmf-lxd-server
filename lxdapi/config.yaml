@@ -1,5 +1,6 @@
-# ==================== 核心系统配置 ====================
-
+# ==========================================
+# 核心系统配置
+# ==========================================
 system:
   server:
     # 服务端口
@@ -62,6 +63,9 @@ system:
     # 是否允许携带凭证
     allow_credentials: true
 
+# ==========================================
+# 日志配置
+# ==========================================
 logging:
   # 日志级别 debug | info | warn | error
   level: "error"
@@ -78,8 +82,9 @@ logging:
   # 开发模式（控制台输出格式）
   dev_mode: false
 
-# ==================== 任务管理 ====================
-
+# ==========================================
+# 任务管理配置
+# ==========================================
 task_queue:
   # 队列后端类型 database | redis
   backend: "${QUEUE_BACKEND}"
@@ -98,12 +103,16 @@ task_status:
   # 任务记录保留时间（小时）
   retention_hours: 72
 
-# ==================== 容器管理 ====================
-
+# ==========================================
+# 容器管理配置
+# ==========================================
 container_api:
   # 存储池列表（按顺序尝试）
   storage_pools: [${STORAGE_POOLS}]
 
+# ==========================================
+# 流量管理配置
+# ==========================================
 traffic_api:
   # 流量统计间隔（秒）
   interval: ${TRAFFIC_INTERVAL}
@@ -122,12 +131,18 @@ traffic_api:
     # 每批重置检查的容器数量
     batch_size: ${TRAFFIC_AUTO_RESET_BATCH_SIZE}
 
+# ==========================================
+# 控制台配置
+# ==========================================
 console_api:
   # 会话超时时间（秒）
   session_timeout: 1800
 
-# ==================== 网络功能 ====================
+# ==========================================
+# 网络功能配置
+# ==========================================
 
+# NAT 端口转发配置
 nat_api:
   # NAT 端口转发功能总开关
   enabled: ${NAT_SUPPORT}
@@ -150,6 +165,7 @@ nat_api:
     # 忽略的网卡前缀
     ignored_interfaces: ["docker0", "br-"]
 
+# IPv4 独立绑定配置
 ipv4_binding:
   # IPv4 独立绑定功能总开关
   enabled: ${IPV4_BINDING_ENABLED}
@@ -162,6 +178,7 @@ ipv4_binding:
     # 地址池大小
     pool_size: ${IPV4_POOL_SIZE}
 
+# IPv6 独立绑定配置
 ipv6_binding:
   # IPv6 独立绑定功能总开关
   enabled: ${IPV6_BINDING_ENABLED}
@@ -176,6 +193,20 @@ ipv6_binding:
     # 地址池大小
     pool_size: ${IPV6_POOL_SIZE}
 
+# Nginx 反向代理配置
 proxy_api:
   # 反向代理功能总开关
   enabled: ${NGINX_PROXY_ENABLED}
+
+# ==========================================
+# 管理面板配置
+# ==========================================
+admin:
+  # 管理面板功能总开关
+  enabled: ${ADMIN_PANEL_ENABLED}
+  # 管理员用户名
+  username: "${ADMIN_USERNAME}"
+  # 管理员密码
+  password: "${ADMIN_PASSWORD}"
+  # Session密钥
+  session_secret: "${ADMIN_SESSION_SECRET}"

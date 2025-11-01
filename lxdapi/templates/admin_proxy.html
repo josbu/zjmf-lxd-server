@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "admin_header.html" .}}
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">反向代理管理</h1>
+                <p class="text-gray-600 mt-1">管理容器反向代理配置</p>
+            </div>
+            <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
+                刷新
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200" id="proxyTable">
+            <div class="p-8 text-center text-gray-500">
+                <span class="iconify animate-pulse" data-icon="mdi:loading" data-width="24"></span>
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    {{template "admin_footer.html" .}}
+
+    <script>
+        $(document).ready(function() {
+            loadProxy();
+        });
+
+        async function loadProxy() {
+            try {
+                const response = await fetch('/api/cache/proxy');
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    renderProxy(result.data);
+                } else {
+                    $('#proxyTable').html('<div class="p-8 text-center text-gray-500">暂无代理配置</div>');
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                $('#proxyTable').html('<div class="p-8 text-center text-red-500">加载失败</div>');
+            }
+        }
+
+        function renderProxy(configs) {
+            if (!configs || configs.length === 0) {
+                $('#proxyTable').html('<div class="p-8 text-center text-gray-500">暂无代理配置</div>');
+                return;
+            }
+
+            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">域名</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">端口</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SSL</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
+            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+
+            configs.forEach(config => {
+                html += `<tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${config.domain || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${config.container_name || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${config.port || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${config.ssl_enabled ? '是' : '否'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${config.created_at ? new Date(config.created_at).toLocaleString('zh-CN') : '-'}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            $('#proxyTable').html(html);
+        }
+    </script>
+</body>
+</html>
+

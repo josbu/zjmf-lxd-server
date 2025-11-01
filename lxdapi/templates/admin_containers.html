@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    {{template "admin_header.html" .}}
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">容器管理</h1>
+                <p class="text-gray-600 mt-1">管理所有LXD容器实例</p>
+            </div>
+            <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
+                <span class="iconify" data-icon="mdi:refresh" data-width="16"></span>
+                刷新
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200" id="containersTable">
+            <div class="p-8 text-center text-gray-500">
+                <span class="iconify animate-pulse" data-icon="mdi:loading" data-width="24"></span>
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+
+    {{template "admin_footer.html" .}}
+
+    <script>
+        $(document).ready(function() {
+            loadContainers();
+        });
+
+        async function loadContainers() {
+            try {
+                const response = await fetch('/api/cache/containers');
+                const result = await response.json();
+                if (result.code === 200 && result.data) {
+                    renderContainers(result.data);
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                $('#containersTable').html('<div class="p-8 text-center text-red-500">加载失败</div>');
+            }
+        }
+
+        function renderContainers(containers) {
+            if (!containers || containers.length === 0) {
+                $('#containersTable').html('<div class="p-8 text-center text-gray-500">暂无容器</div>');
+                return;
+            }
+
+            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IPv4</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
+            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>';
+            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+
+            containers.forEach(container => {
+                const statusClass = container.status === 'Running' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
+                html += `<tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${container.name || '-'}</td>
+                    <td class="px-6 py-4 text-sm"><span class="px-2 py-1 rounded ${statusClass}">${container.status || '-'}</span></td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${container.ipv4 || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${container.created_at ? new Date(container.created_at).toLocaleString('zh-CN') : '-'}</td>
+                    <td class="px-6 py-4 text-sm">
+                        <a href="/admin/containers/${container.name}" class="text-blue-600 hover:text-blue-800">详情</a>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            $('#containersTable').html(html);
+        }
+    </script>
+</body>
+</html>
+

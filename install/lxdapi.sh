@@ -308,13 +308,13 @@ DEFAULT_PORT="8080"
 
 echo
 echo "========================================"
-echo "      步骤 7/8: 配置向导"
+echo "      步骤 7/9: 配置向导"
 echo "========================================"
 echo
 echo "    LXD API 服务配置向导 - $VERSION"
 echo
 
-echo "==== 步骤 1/6: 基础信息配置 ===="
+echo "==== 步骤 1/7: 基础信息配置 ===="
 echo
 
 read -p "服务器外网 IP [$DEFAULT_IP]: " EXTERNAL_IP
@@ -329,7 +329,7 @@ SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
 ok "基础信息配置完成"
 echo
 
-echo "==== 步骤 2/6: 存储池配置 ===="
+echo "==== 步骤 2/7: 存储池配置 ===="
 echo
 
 DETECTED_POOLS_LIST=$(lxc storage list --format csv 2>/dev/null | cut -d, -f1 | grep -v "^NAME$" | head -10)
@@ -391,7 +391,7 @@ case $STORAGE_MODE in
 esac
 echo
 
-echo "==== 步骤 3/6: 数据库与队列后端组合 ===="
+echo "==== 步骤 3/7: 数据库与队列后端组合 ===="
 echo
 echo "请选择数据库与任务队列后端组合："
 echo "1. SQLite + Database 队列 (轻量级方案)"
@@ -577,7 +577,7 @@ esac
 ok "数据库与队列配置完成"
 echo
 
-echo "==== 步骤 4/5: 流量监控性能配置 ===="
+echo "==== 步骤 4/7: 流量监控性能配置 ===="
 echo
 echo "请选择流量监控性能方案："
 echo "1. 高性能模式 (适用独立服务器 8核+)         - CPU占用 10-15%, 封禁响应 ~10秒"
@@ -670,7 +670,7 @@ esac
 ok "流量监控性能配置完成"
 echo
 
-echo "==== 步骤 5/5: 网络管理方案 ===="
+echo "==== 步骤 5/7: 网络管理方案 ===="
 echo
 echo "请选择网络模式："
 echo "1. IPv4 NAT共享"
@@ -804,7 +804,7 @@ fi
 ok "网络配置完成"
 echo
 
-echo "==== 步骤 6/6: Nginx 反向代理配置 ===="
+echo "==== 步骤 6/7: Nginx 反向代理配置 ===="
 echo
 echo "是否启用 Nginx 反向代理功能？"
 echo "此功能允许为容器配置域名反向代理（需要已安装 Nginx）"
@@ -851,8 +851,53 @@ else
 fi
 
 echo
+echo "==== 步骤 7/7: 管理面板配置 ===="
+echo
+echo "是否启用 Web 管理面板？"
+echo "管理面板提供可视化的容器管理界面，无需命令行操作"
+echo
+read -p "是否启用管理面板? (Y/n): " ENABLE_ADMIN_PANEL
+
+if [[ $ENABLE_ADMIN_PANEL == "n" || $ENABLE_ADMIN_PANEL == "N" ]]; then
+  ADMIN_PANEL_ENABLED="false"
+  ADMIN_USERNAME="admin"
+  ADMIN_PASSWORD="admin123"
+  ADMIN_SESSION_SECRET=$(openssl rand -base64 32)
+  ok "已禁用管理面板"
+else
+  ADMIN_PANEL_ENABLED="true"
+  echo
+  echo "==== 管理员账号配置 ===="
+  
+  read -p "管理员用户名 [admin]: " ADMIN_USERNAME
+  ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+  
+  while true; do
+    read -s -p "管理员密码（至少6位）: " ADMIN_PASSWORD
+    echo
+    if [[ ${#ADMIN_PASSWORD} -lt 6 ]]; then
+      warn "密码长度至少6位，请重新输入"
+      continue
+    fi
+    read -s -p "确认密码: " ADMIN_PASSWORD_CONFIRM
+    echo
+    if [[ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]]; then
+      warn "两次密码不一致，请重新输入"
+      continue
+    fi
+    break
+  done
+  
+  ADMIN_SESSION_SECRET=$(openssl rand -base64 32)
+  
+  ok "管理面板配置完成"
+  info "访问地址: https://$EXTERNAL_IP:$SERVER_PORT/admin/login"
+  info "管理员用户名: $ADMIN_USERNAME"
+fi
+
+echo
 echo "========================================"
-echo "      步骤 8/8: 生成配置和启动服务"
+echo "      步骤 8/9: 生成配置文件"
 echo "========================================"
 echo
 
@@ -946,7 +991,18 @@ replace_config_var "TRAFFIC_AUTO_RESET_BATCH_SIZE" "$TRAFFIC_AUTO_RESET_BATCH_SI
 
 replace_config_var "NGINX_PROXY_ENABLED" "$NGINX_PROXY_ENABLED"
 
+replace_config_var "ADMIN_PANEL_ENABLED" "$ADMIN_PANEL_ENABLED"
+replace_config_var "ADMIN_USERNAME" "$ADMIN_USERNAME"
+replace_config_var "ADMIN_PASSWORD" "$ADMIN_PASSWORD"
+replace_config_var "ADMIN_SESSION_SECRET" "$ADMIN_SESSION_SECRET"
+
 ok "配置文件已生成"
+
+echo
+echo "========================================"
+echo "      步骤 9/9: 创建服务并启动"
+echo "========================================"
+echo
 
 info "创建系统服务..."
 
@@ -1027,6 +1083,15 @@ echo
 echo "反向代理:"
 if [[ $NGINX_PROXY_ENABLED == "true" ]]; then
   echo "  状态: 已启用 (Nginx 已安装并启动)"
+else
+  echo "  状态: 未启用"
+fi
+echo
+echo "管理面板:"
+if [[ $ADMIN_PANEL_ENABLED == "true" ]]; then
+  echo "  状态: 已启用"
+  echo "  访问: https://$EXTERNAL_IP:$SERVER_PORT/admin/login"
+  echo "  用户: $ADMIN_USERNAME"
 else
   echo "  状态: 未启用"
 fi
