@@ -849,7 +849,42 @@ function lxdserver_getNATRuleCount($params)
     $res = lxdserver_Curl($params, $data, 'GET');
 
     if (isset($res['code']) && $res['code'] == 200 && isset($res['data']) && is_array($res['data'])) {
-        return count($res['data']);
+        $rules = $res['data'];
+        
+        $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'false') === 'true';
+        $counted = [];
+        
+        foreach ($rules as $rule) {
+            $external_port = $rule['external_port'] ?? $rule['dport'] ?? '';
+            $internal_port = $rule['internal_port'] ?? $rule['sport'] ?? '';
+            $external_port_end = $rule['external_port_end'] ?? $rule['dport_end'] ?? 0;
+            $internal_port_end = $rule['internal_port_end'] ?? $rule['sport_end'] ?? 0;
+            $protocol = strtolower($rule['protocol'] ?? $rule['dtype'] ?? '');
+            
+            $key = $external_port . '_' . $internal_port . '_' . $external_port_end . '_' . $internal_port_end;
+            
+            if (!isset($counted[$key])) {
+                $counted[$key] = [
+                    'external_port' => $external_port,
+                    'external_port_end' => $external_port_end,
+                    'protocols' => []
+                ];
+            }
+            
+            $counted[$key]['protocols'][] = $protocol;
+        }
+        
+        $totalCount = 0;
+        foreach ($counted as $item) {
+            if ($item['external_port_end'] > 0) {
+                $portCount = $item['external_port_end'] - $item['external_port'] + 1;
+                $totalCount += $portCount;
+            } else {
+                $totalCount += 1;
+            }
+        }
+        
+        return $totalCount;
     }
 
     return 0;
@@ -865,48 +900,49 @@ function lxdserver_natadd($params)
     
     parse_str(file_get_contents("php://input"), $post);
 
-    $port_mode = trim($post['port_mode'] ?? 'single');
+    $sport = intval($post['sport'] ?? 0);
+    $dport = intval($post['dport'] ?? 0);
+    $sport_end = intval($post['sport_end'] ?? 0);
+    $dport_end = intval($post['dport_end'] ?? 0);
     $description = trim($post['description'] ?? '');
     $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'false') === 'true';
 
-    // 根据UDP配置自动设置协议：启用UDP时使用both（TCP+UDP），否则只用tcp
     $dtype = $udp_enabled ? 'both' : 'tcp';
 
     $nat_limit = intval($params['configoptions']['nat_limit'] ?? 5);
     $current_count = lxdserver_getNATRuleCount($params);
-
-    // 端口段模式
-    if ($port_mode === 'range') {
-        $sport_start = intval($post['sport_start'] ?? 0);
-        $sport_end = intval($post['sport_end'] ?? 0);
-        $dport_start = intval($post['dport_start'] ?? 0);
-        $dport_end = intval($post['dport_end'] ?? 0);
-        
-        if ($sport_start <= 0 || $sport_end <= 0 || $dport_start <= 0 || $dport_end <= 0) {
-            return ['status' => 'error', 'msg' => '端口段参数不完整'];
+    
+    if ($sport <= 0 || $sport > 65535) {
+        return ['status' => 'error', 'msg' => '内网起始端口超过范围'];
+    }
+    
+    $isPortRange = $sport_end > 0 && $dport_end > 0;
+    
+    if ($isPortRange) {
+        if ($sport > $sport_end) {
+            return ['status' => 'error', 'msg' => '内网端口范围错误'];
         }
         
-        if ($sport_start > $sport_end || $dport_start > $dport_end) {
-            return ['status' => 'error', 'msg' => '端口段起始值不能大于结束值'];
+        if ($dport > 0 && $dport > $dport_end) {
+            return ['status' => 'error', 'msg' => '外网端口范围错误'];
         }
         
-        $internal_range = $sport_end - $sport_start + 1;
-        $external_range = $dport_end - $dport_start + 1;
+        $internal_range = $sport_end - $sport + 1;
+        $external_range = $dport_end - $dport + 1;
         
         if ($internal_range !== $external_range) {
-            return ['status' => 'error', 'msg' => '内网和外网端口范围大小必须一致'];
+            return ['status' => 'error', 'msg' => '内网和外网端口数量必须一致'];
         }
         
-        // 检查端口段数量限制
         if ($current_count + $internal_range > $nat_limit) {
             return ['status' => 'error', 'msg' => "端口段包含 {$internal_range} 个端口，将超过NAT规则限制（剩余配额：" . ($nat_limit - $current_count) . "）"];
         }
         
         $requestData = 'hostname=' . urlencode($params['domain']) . 
                        '&dtype=' . urlencode($dtype) . 
-                       '&sport=' . $sport_start . 
+                       '&sport=' . $sport . 
                        '&sport_end=' . $sport_end . 
-                       '&dport=' . $dport_start . 
+                       '&dport=' . $dport . 
                        '&dport_end=' . $dport_end;
         
         if (!empty($description)) {
@@ -929,14 +965,6 @@ function lxdserver_natadd($params)
         }
     }
     
-    // 单端口模式（原有逻辑）
-    $dport = intval($post['dport'] ?? 0);
-    $sport = intval($post['sport'] ?? 0);
-    
-    if ($sport <= 0 || $sport > 65535) {
-        return ['status' => 'error', 'msg' => '容器内部端口超过范围'];
-    }
-
     if ($current_count >= $nat_limit) {
         return ['status' => 'error', 'msg' => "NAT规则数量已达到限制（{$nat_limit}条），无法添加更多规则"];
     }
@@ -988,11 +1016,13 @@ function lxdserver_natdel($params)
 
     $dport = intval($post['dport'] ?? 0);
     $sport = intval($post['sport'] ?? 0);
+    $dport_end = intval($post['dport_end'] ?? 0);
+    $sport_end = intval($post['sport_end'] ?? 0);
     $dtype = strtolower(trim($post['dtype'] ?? ''));
     $udp_enabled = ($params['configoptions']['udp_enabled'] ?? 'false') === 'true';
 
-    if (!in_array($dtype, ['tcp', 'udp'])) {
-        return ['status' => 'error', 'msg' => '不支持的协议类型，仅支持TCP和UDP'];
+    if (!in_array($dtype, ['tcp', 'udp', 'both'])) {
+        return ['status' => 'error', 'msg' => '不支持的协议类型'];
     }
     
     if ($dtype === 'udp' && !$udp_enabled) {
@@ -1004,10 +1034,51 @@ function lxdserver_natdel($params)
         return ['status' => 'error', 'msg' => '外网端口映射范围为10000-65535'];
     }
 
+    if ($dtype === 'both') {
+        $success_count = 0;
+        $error_msgs = [];
+        
+        foreach (['tcp', 'udp'] as $protocol) {
+            $requestData = 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($protocol) . '&dport=' . $dport . '&sport=' . $sport;
+            
+            if ($dport_end > 0 && $sport_end > 0) {
+                $requestData .= '&dport_end=' . $dport_end . '&sport_end=' . $sport_end;
+            }
+            
+            $data = [
+                'url'  => '/api/delport',
+                'type' => 'application/x-www-form-urlencoded',
+                'data' => $requestData,
+            ];
+            
+            $res = lxdserver_Curl($params, $data, 'POST');
+            
+            if (isset($res['code']) && $res['code'] == 200) {
+                $success_count++;
+            } else {
+                $error_msgs[] = $protocol . ': ' . ($res['msg'] ?? '删除失败');
+            }
+        }
+        
+        if ($success_count === 2) {
+            return ['status' => 'success', 'msg' => 'NAT转发删除成功'];
+        } else if ($success_count === 1) {
+            return ['status' => 'success', 'msg' => 'NAT转发部分删除成功：' . implode(', ', $error_msgs)];
+        } else {
+            return ['status' => 'error', 'msg' => 'NAT转发删除失败：' . implode(', ', $error_msgs)];
+        }
+    }
+
+    $requestData = 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($dtype) . '&dport=' . $dport . '&sport=' . $sport;
+    
+    if ($dport_end > 0 && $sport_end > 0) {
+        $requestData .= '&dport_end=' . $dport_end . '&sport_end=' . $sport_end;
+    }
+    
     $data = [
         'url'  => '/api/delport',
         'type' => 'application/x-www-form-urlencoded',
-        'data' => 'hostname=' . urlencode($params['domain']) . '&dtype=' . urlencode($dtype) . '&dport=' . $dport . '&sport=' . $sport,
+        'data' => $requestData,
     ];
 
     $res = lxdserver_Curl($params, $data, 'POST');
