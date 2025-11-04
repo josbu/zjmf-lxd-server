@@ -12,13 +12,24 @@
     {{template "admin_header.html" .}}
     
     <div class="container mx-auto px-4 py-8">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                <span class="iconify text-blue-600" data-icon="mdi:network" data-width="36"></span>
+                NAT
+            </h1>
+            <p class="text-gray-600 mt-1">端口转发规则管理</p>
+        </div>
+
         <div class="flex justify-between items-center mb-6">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                    <span class="iconify text-blue-600" data-icon="mdi:network" data-width="36"></span>
-                    NAT
-                </h1>
-                <p class="text-gray-600 mt-1">端口转发规则管理</p>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-600">每页显示:</span>
+                <select id="pageSize" onchange="changePageSize()" class="select select-bordered select-xs">
+                    <option value="25">25 条</option>
+                    <option value="50">50 条</option>
+                    <option value="100">100 条</option>
+                    <option value="all">全部</option>
+                </select>
+                <span id="pageInfo" class="text-xs text-gray-600"></span>
             </div>
             <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
                 刷新
@@ -31,11 +42,24 @@
                 <p>加载中...</p>
             </div>
         </div>
+
+        <div id="paginationContainer" class="mt-4 flex justify-center" style="display: none;">
+            <div class="join">
+                <button id="prevPage" onclick="goToPage(currentPage - 1)" class="join-item btn btn-sm">«</button>
+                <button class="join-item btn btn-sm">第 <span id="currentPageNum">1</span> 页</button>
+                <button id="nextPage" onclick="goToPage(currentPage + 1)" class="join-item btn btn-sm">»</button>
+            </div>
+        </div>
     </div>
 
     {{template "admin_footer.html" .}}
 
     <script>
+        let allData = [];
+        let pageSize = 25;
+        let currentPage = 1;
+        let totalPages = 1;
+
         $(document).ready(function() {
             loadNAT();
         });
@@ -49,7 +73,21 @@
                 });
                 const result = await response.json();
                 if (result.code === 200 && result.data) {
-                    renderNAT(result.data);
+                    // 合并 TCP+UDP 规则
+                    const mergedRules = new Map();
+                    result.data.forEach(rule => {
+                        const key = `${rule.container_name}-${rule.external_port}-${rule.internal_port}-${rule.external_port_end || ''}-${rule.internal_port_end || ''}`;
+                        if (mergedRules.has(key)) {
+                            const existing = mergedRules.get(key);
+                            if (existing.protocol !== rule.protocol) {
+                                existing.protocol = 'TCP+UDP';
+                            }
+                        } else {
+                            mergedRules.set(key, {...rule});
+                        }
+                    });
+                    allData = Array.from(mergedRules.values());
+                    renderNAT();
                 } else {
                     $('#natTable').html('<div class="p-8 text-center text-gray-500">暂无NAT规则</div>');
                 }
@@ -59,38 +97,75 @@
             }
         }
 
-        function renderNAT(rules) {
-            if (!rules || rules.length === 0) {
+        function getPageData() {
+            if (pageSize === 'all') return allData;
+            const size = parseInt(pageSize);
+            const start = (currentPage - 1) * size;
+            return allData.slice(start, start + size);
+        }
+
+        function updatePaginationInfo() {
+            if (pageSize === 'all') {
+                $('#paginationContainer').hide();
+                $('#pageInfo').text('');
+                return;
+            }
+            
+            const size = parseInt(pageSize);
+            totalPages = Math.ceil(allData.length / size);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+            
+            const start = (currentPage - 1) * size + 1;
+            const end = Math.min(currentPage * size, allData.length);
+            
+            $('#pageInfo').text(`(显示 ${start}-${end})`);
+            $('#currentPageNum').text(currentPage);
+            $('#prevPage').prop('disabled', currentPage === 1);
+            $('#nextPage').prop('disabled', currentPage === totalPages);
+            $('#paginationContainer').show();
+        }
+
+        function changePageSize() {
+            pageSize = $('#pageSize').val();
+            currentPage = 1;
+            renderNAT();
+        }
+
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderNAT();
+            updatePaginationInfo();
+        }
+
+        function renderNAT() {
+            if (!allData || allData.length === 0) {
                 $('#natTable').html('<div class="p-8 text-center text-gray-500">暂无NAT规则</div>');
+                $('#paginationContainer').hide();
                 return;
             }
 
-            // 合并 TCP+UDP 规则
-            const mergedRules = new Map();
-            rules.forEach(rule => {
-                const key = `${rule.container_name}-${rule.external_port}-${rule.internal_port}-${rule.external_port_end || ''}-${rule.internal_port_end || ''}`;
-                if (mergedRules.has(key)) {
-                    const existing = mergedRules.get(key);
-                    if (existing.protocol !== rule.protocol) {
-                        existing.protocol = 'TCP+UDP';
-                    }
-                } else {
-                    mergedRules.set(key, {...rule});
-                }
-            });
+            const pageData = getPageData();
 
-            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">外部端口</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">内部端口</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">协议</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP版本</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">描述</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
-            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+            let html = `
+                <div class="overflow-x-auto">
+                    <table class="table table-xs">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="text-xs text-gray-600">容器</th>
+                                <th class="text-xs text-gray-600">外部端口</th>
+                                <th class="text-xs text-gray-600">内部端口</th>
+                                <th class="text-xs text-gray-600">协议</th>
+                                <th class="text-xs text-gray-600">IP版本</th>
+                                <th class="text-xs text-gray-600">状态</th>
+                                <th class="text-xs text-gray-600">描述</th>
+                                <th class="text-xs text-gray-600">创建时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
 
-            mergedRules.forEach(rule => {
+            pageData.forEach(rule => {
                 // 显示端口范围
                 const externalPort = rule.external_port_end && rule.external_port_end > rule.external_port 
                     ? `${rule.external_port}-${rule.external_port_end}` 
@@ -114,20 +189,23 @@
                     ? '<span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">活跃</span>'
                     : '<span class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">未知</span>';
 
-                html += `<tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${rule.container_name || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500"><code class="text-xs font-mono">${externalPort || '-'}</code></td>
-                    <td class="px-6 py-4 text-sm text-gray-500"><code class="text-xs font-mono">${internalPort || '-'}</code></td>
-                    <td class="px-6 py-4">${protocolBadge}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${rule.ip_version || 'IPv4'}</td>
-                    <td class="px-6 py-4">${statusBadge}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${rule.description || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${rule.created_at ? new Date(rule.created_at).toLocaleString('zh-CN') : '-'}</td>
-                </tr>`;
+                html += `
+                    <tr class="hover">
+                        <td class="font-medium text-gray-900">${rule.container_name || '-'}</td>
+                        <td><code class="text-xs font-mono text-gray-600">${externalPort || '-'}</code></td>
+                        <td><code class="text-xs font-mono text-gray-600">${internalPort || '-'}</code></td>
+                        <td>${protocolBadge}</td>
+                        <td class="text-gray-500">${rule.ip_version || 'IPv4'}</td>
+                        <td>${statusBadge}</td>
+                        <td class="text-gray-500">${rule.description || '-'}</td>
+                        <td class="text-gray-500">${rule.last_update ? new Date(rule.last_update).toLocaleString('zh-CN') : '-'}</td>
+                    </tr>
+                `;
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             $('#natTable').html(html);
+            updatePaginationInfo();
         }
     </script>
 </body>

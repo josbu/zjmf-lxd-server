@@ -22,7 +22,7 @@
 
         <div class="flex justify-between items-center mb-6">
             <div class="flex gap-2">
-                <select id="statusFilter" onchange="filterTasks()" class="select select-bordered select-sm">
+                <select id="statusFilter" onchange="filterTasks()" class="select select-bordered select-xs">
                     <option value="">所有状态</option>
                     <option value="queued">排队中</option>
                     <option value="running">执行中</option>
@@ -30,7 +30,7 @@
                     <option value="failed">失败</option>
                     <option value="cancelled">已取消</option>
                 </select>
-                <select id="actionFilter" onchange="filterTasks()" class="select select-bordered select-sm">
+                <select id="actionFilter" onchange="filterTasks()" class="select select-bordered select-xs">
                     <option value="">所有操作</option>
                     <option value="create">创建</option>
                     <option value="start">启动</option>
@@ -39,6 +39,13 @@
                     <option value="delete">删除</option>
                     <option value="reinstall">重装</option>
                 </select>
+                <select id="pageSize" onchange="changePageSize()" class="select select-bordered select-xs">
+                    <option value="25">25 条</option>
+                    <option value="50">50 条</option>
+                    <option value="100">100 条</option>
+                    <option value="all">全部</option>
+                </select>
+                <span id="pageInfo" class="text-xs text-gray-600 self-center"></span>
             </div>
             <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
                 刷新
@@ -51,12 +58,24 @@
                 <p>加载中...</p>
             </div>
         </div>
+
+        <div id="paginationContainer" class="mt-4 flex justify-center" style="display: none;">
+            <div class="join">
+                <button id="prevPage" onclick="goToPage(currentPage - 1)" class="join-item btn btn-sm">«</button>
+                <button class="join-item btn btn-sm">第 <span id="currentPageNum">1</span> 页</button>
+                <button id="nextPage" onclick="goToPage(currentPage + 1)" class="join-item btn btn-sm">»</button>
+            </div>
+        </div>
     </div>
 
     {{template "admin_footer.html" .}}
 
     <script>
         let allTasks = [];
+        let filteredData = [];
+        let pageSize = 25;
+        let currentPage = 1;
+        let totalPages = 1;
 
         $(document).ready(function() {
             loadTasks();
@@ -72,7 +91,7 @@
                 const result = await response.json();
                 if (result.code === 200 && result.data) {
                     allTasks = result.data;
-                    renderTasks(allTasks);
+                    filterTasks();
                 } else {
                     $('#taskTable').html('<div class="p-8 text-center text-gray-500">暂无任务数据</div>');
                 }
@@ -86,15 +105,57 @@
             const statusFilter = $('#statusFilter').val();
             const actionFilter = $('#actionFilter').val();
             
-            let filtered = allTasks;
+            filteredData = allTasks;
             if (statusFilter) {
-                filtered = filtered.filter(t => t.status === statusFilter);
+                filteredData = filteredData.filter(t => t.status === statusFilter);
             }
             if (actionFilter) {
-                filtered = filtered.filter(t => t.action === actionFilter);
+                filteredData = filteredData.filter(t => t.action === actionFilter);
             }
             
-            renderTasks(filtered);
+            currentPage = 1;
+            renderTasks();
+        }
+
+        function getPageData() {
+            if (pageSize === 'all') return filteredData;
+            const size = parseInt(pageSize);
+            const start = (currentPage - 1) * size;
+            return filteredData.slice(start, start + size);
+        }
+
+        function updatePaginationInfo() {
+            if (pageSize === 'all') {
+                $('#paginationContainer').hide();
+                $('#pageInfo').text('');
+                return;
+            }
+            
+            const size = parseInt(pageSize);
+            totalPages = Math.ceil(filteredData.length / size);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+            
+            const start = (currentPage - 1) * size + 1;
+            const end = Math.min(currentPage * size, filteredData.length);
+            
+            $('#pageInfo').text(`(显示 ${start}-${end})`);
+            $('#currentPageNum').text(currentPage);
+            $('#prevPage').prop('disabled', currentPage === 1);
+            $('#nextPage').prop('disabled', currentPage === totalPages);
+            $('#paginationContainer').show();
+        }
+
+        function changePageSize() {
+            pageSize = $('#pageSize').val();
+            currentPage = 1;
+            renderTasks();
+        }
+
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderTasks();
+            updatePaginationInfo();
         }
 
         function formatDuration(start, end) {
@@ -105,25 +166,35 @@
             return (duration / 60000).toFixed(2) + 'min';
         }
 
-        function renderTasks(tasks) {
-            if (!tasks || tasks.length === 0) {
+        function renderTasks() {
+            if (!filteredData || filteredData.length === 0) {
                 $('#taskTable').html('<div class="p-8 text-center text-gray-500">暂无任务数据</div>');
+                $('#paginationContainer').hide();
                 return;
             }
 
-            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">优先级</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">耗时</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">重试</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>';
-            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+            const pageData = getPageData();
 
-            tasks.forEach(task => {
+            let html = `
+                <div class="overflow-x-auto">
+                    <table class="table table-xs">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="text-xs text-gray-600">ID</th>
+                                <th class="text-xs text-gray-600">容器</th>
+                                <th class="text-xs text-gray-600">操作</th>
+                                <th class="text-xs text-gray-600">状态</th>
+                                <th class="text-xs text-gray-600">优先级</th>
+                                <th class="text-xs text-gray-600">耗时</th>
+                                <th class="text-xs text-gray-600">重试</th>
+                                <th class="text-xs text-gray-600">创建时间</th>
+                                <th class="text-xs text-gray-600">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            pageData.forEach(task => {
                 // 状态标签
                 let statusBadge = '';
                 switch(task.status) {
@@ -149,15 +220,9 @@
 
                 // 操作标签
                 const actionMap = {
-                    'create': '创建',
-                    'start': '启动',
-                    'stop': '停止',
-                    'reboot': '重启',
-                    'delete': '删除',
-                    'reinstall': '重装',
-                    'pause': '暂停',
-                    'resume': '恢复',
-                    'reset_password': '重置密码'
+                    'create': '创建', 'start': '启动', 'stop': '停止',
+                    'reboot': '重启', 'delete': '删除', 'reinstall': '重装',
+                    'pause': '暂停', 'resume': '恢复', 'reset_password': '重置密码'
                 };
                 const actionText = actionMap[task.action] || task.action;
 
@@ -169,41 +234,103 @@
 
                 const duration = formatDuration(task.started_at, task.completed_at);
                 
-                html += `<tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm font-mono text-gray-500">#${task.id}</td>
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${task.container_name || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700">${actionText}</td>
-                    <td class="px-6 py-4">${statusBadge}</td>
-                    <td class="px-6 py-4 text-sm ${priorityColor}">${task.priority}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${duration}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${task.retry_count}/${task.max_retries}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${task.created_at ? new Date(task.created_at).toLocaleString('zh-CN') : '-'}</td>
-                    <td class="px-6 py-4">
-                        <button onclick="viewTaskDetails(${task.id})" class="text-blue-600 hover:text-blue-800 text-xs underline">详情</button>
-                    </td>
-                </tr>`;
+                html += `
+                    <tr class="hover">
+                        <td class="font-mono text-gray-500">#${task.id}</td>
+                        <td class="font-medium text-gray-900">${task.container_name || '-'}</td>
+                        <td class="text-gray-700">${actionText}</td>
+                        <td>${statusBadge}</td>
+                        <td class="${priorityColor}">${task.priority}</td>
+                        <td class="text-gray-500">${duration}</td>
+                        <td class="text-gray-500">${task.retry_count}/${task.max_retries}</td>
+                        <td class="text-gray-500">${task.created_at ? new Date(task.created_at).toLocaleString('zh-CN') : '-'}</td>
+                        <td>
+                            <button onclick="viewTaskDetails(${task.id})" class="text-blue-600 hover:text-blue-800 text-xs underline">详情</button>
+                        </td>
+                    </tr>
+                `;
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             $('#taskTable').html(html);
+            updatePaginationInfo();
         }
 
         function viewTaskDetails(taskId) {
             const task = allTasks.find(t => t.id === taskId);
             if (!task) return;
 
-            let details = `任务 #${task.id} 详情\n\n`;
-            details += `容器: ${task.container_name}\n`;
-            details += `操作: ${task.action}\n`;
-            details += `状态: ${task.status}\n`;
-            details += `TraceID: ${task.trace_id || '-'}\n`;
-            details += `BatchID: ${task.batch_id || '-'}\n`;
-            details += `ClientIP: ${task.client_ip || '-'}\n`;
-            details += `错误信息: ${task.error_msg || '-'}\n`;
-            details += `结果: ${task.result || '-'}\n`;
-            details += `日志: ${task.log || '-'}\n`;
+            // 操作映射
+            const actionMap = {
+                'create': '创建', 'start': '启动', 'stop': '停止',
+                'reboot': '重启', 'delete': '删除', 'reinstall': '重装',
+                'pause': '暂停', 'resume': '恢复', 'reset_password': '重置密码'
+            };
+
+            let details = `<div class="space-y-2 text-sm">`;
+            details += `<div><span class="font-semibold">任务ID:</span> #${task.id}</div>`;
+            details += `<div><span class="font-semibold">容器:</span> ${task.container_name || '-'}</div>`;
+            details += `<div><span class="font-semibold">操作:</span> ${actionMap[task.action] || task.action}</div>`;
+            details += `<div><span class="font-semibold">状态:</span> ${task.status}</div>`;
+            details += `<div><span class="font-semibold">优先级:</span> ${task.priority}</div>`;
             
-            alert(details);
+            // 只显示有值的字段
+            if (task.trace_id) {
+                details += `<div><span class="font-semibold">TraceID:</span> <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">${task.trace_id}</code></div>`;
+            }
+            if (task.batch_id) {
+                details += `<div><span class="font-semibold">BatchID:</span> <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">${task.batch_id}</code></div>`;
+            }
+            if (task.client_ip) {
+                details += `<div><span class="font-semibold">ClientIP:</span> ${task.client_ip}</div>`;
+            }
+            if (task.error_msg) {
+                details += `<div><span class="font-semibold text-red-600">错误信息:</span> <span class="text-red-600">${task.error_msg}</span></div>`;
+            }
+            if (task.result) {
+                details += `<div><span class="font-semibold">结果:</span> ${task.result}</div>`;
+            }
+            if (task.log) {
+                details += `<div class="mt-2"><span class="font-semibold">执行日志:</span></div>`;
+                details += `<pre class="mt-1 p-2 bg-gray-50 rounded text-xs max-h-40 overflow-y-auto">${task.log}</pre>`;
+            }
+            
+            // 时间信息
+            if (task.started_at) {
+                details += `<div><span class="font-semibold">开始时间:</span> ${new Date(task.started_at).toLocaleString('zh-CN')}</div>`;
+            }
+            if (task.completed_at) {
+                details += `<div><span class="font-semibold">完成时间:</span> ${new Date(task.completed_at).toLocaleString('zh-CN')}</div>`;
+            }
+            
+            details += `</div>`;
+
+            // 创建模态框
+            const modal = `
+                <div id="taskDetailModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="closeTaskDetail(event)">
+                    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+                        <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+                            <h3 class="text-lg font-bold text-gray-800">任务详情</h3>
+                            <button onclick="closeTaskDetail()" class="text-gray-400 hover:text-gray-600">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="p-6">
+                            ${details}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            $('body').append(modal);
+        }
+
+        function closeTaskDetail(event) {
+            if (!event || event.target === event.currentTarget) {
+                $('#taskDetailModal').remove();
+            }
         }
     </script>
 </body>

@@ -12,13 +12,24 @@
     {{template "admin_header.html" .}}
     
     <div class="container mx-auto px-4 py-8">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                <span class="iconify text-orange-600" data-icon="mdi:web" data-width="36"></span>
+                代理
+            </h1>
+            <p class="text-gray-600 mt-1">反向代理配置管理</p>
+        </div>
+
         <div class="flex justify-between items-center mb-6">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                    <span class="iconify text-orange-600" data-icon="mdi:web" data-width="36"></span>
-                    代理
-                </h1>
-                <p class="text-gray-600 mt-1">反向代理配置管理</p>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-600">每页显示:</span>
+                <select id="pageSize" onchange="changePageSize()" class="select select-bordered select-xs">
+                    <option value="25">25 条</option>
+                    <option value="50">50 条</option>
+                    <option value="100">100 条</option>
+                    <option value="all">全部</option>
+                </select>
+                <span id="pageInfo" class="text-xs text-gray-600"></span>
             </div>
             <button onclick="window.location.reload()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition">
                 刷新
@@ -31,11 +42,24 @@
                 <p>加载中...</p>
             </div>
         </div>
+
+        <div id="paginationContainer" class="mt-4 flex justify-center" style="display: none;">
+            <div class="join">
+                <button id="prevPage" onclick="goToPage(currentPage - 1)" class="join-item btn btn-sm">«</button>
+                <button class="join-item btn btn-sm">第 <span id="currentPageNum">1</span> 页</button>
+                <button id="nextPage" onclick="goToPage(currentPage + 1)" class="join-item btn btn-sm">»</button>
+            </div>
+        </div>
     </div>
 
     {{template "admin_footer.html" .}}
 
     <script>
+        let allData = [];
+        let pageSize = 25;
+        let currentPage = 1;
+        let totalPages = 1;
+
         $(document).ready(function() {
             loadProxy();
         });
@@ -49,7 +73,8 @@
                 });
                 const result = await response.json();
                 if (result.code === 200 && result.data) {
-                    renderProxy(result.data);
+                    allData = result.data;
+                    renderProxy();
                 } else {
                     $('#proxyTable').html('<div class="p-8 text-center text-gray-500">暂无代理配置</div>');
                 }
@@ -59,23 +84,73 @@
             }
         }
 
-        function renderProxy(configs) {
-            if (!configs || configs.length === 0) {
+        function getPageData() {
+            if (pageSize === 'all') return allData;
+            const size = parseInt(pageSize);
+            const start = (currentPage - 1) * size;
+            return allData.slice(start, start + size);
+        }
+
+        function updatePaginationInfo() {
+            if (pageSize === 'all') {
+                $('#paginationContainer').hide();
+                $('#pageInfo').text('');
+                return;
+            }
+            
+            const size = parseInt(pageSize);
+            totalPages = Math.ceil(allData.length / size);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+            
+            const start = (currentPage - 1) * size + 1;
+            const end = Math.min(currentPage * size, allData.length);
+            
+            $('#pageInfo').text(`(显示 ${start}-${end})`);
+            $('#currentPageNum').text(currentPage);
+            $('#prevPage').prop('disabled', currentPage === 1);
+            $('#nextPage').prop('disabled', currentPage === totalPages);
+            $('#paginationContainer').show();
+        }
+
+        function changePageSize() {
+            pageSize = $('#pageSize').val();
+            currentPage = 1;
+            renderProxy();
+        }
+
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderProxy();
+            updatePaginationInfo();
+        }
+
+        function renderProxy() {
+            if (!allData || allData.length === 0) {
                 $('#proxyTable').html('<div class="p-8 text-center text-gray-500">暂无代理配置</div>');
+                $('#paginationContainer').hide();
                 return;
             }
 
-            let html = '<table class="w-full"><thead class="bg-gray-50 border-b"><tr>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">域名</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">容器端口</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">协议</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SSL</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>';
-            html += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>';
-            html += '</tr></thead><tbody class="divide-y divide-gray-200">';
+            const pageData = getPageData();
 
-            configs.forEach(config => {
+            let html = `
+                <div class="overflow-x-auto">
+                    <table class="table table-xs">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="text-xs text-gray-600">域名</th>
+                                <th class="text-xs text-gray-600">容器</th>
+                                <th class="text-xs text-gray-600">容器端口</th>
+                                <th class="text-xs text-gray-600">SSL</th>
+                                <th class="text-xs text-gray-600">状态</th>
+                                <th class="text-xs text-gray-600">更新时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            pageData.forEach(config => {
                 // SSL 标签
                 const sslBadge = config.ssl_enabled 
                     ? '<span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">已启用</span>'
@@ -86,25 +161,21 @@
                     ? '<span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded">活跃</span>'
                     : '<span class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">未知</span>';
 
-                // 协议标签
-                const protocol = config.protocol || 'http';
-                const protocolBadge = protocol === 'https'
-                    ? '<span class="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded">HTTPS</span>'
-                    : '<span class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">HTTP</span>';
-
-                html += `<tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm font-medium text-blue-600"><a href="http://${config.domain}" target="_blank" class="hover:underline">${config.domain || '-'}</a></td>
-                    <td class="px-6 py-4 text-sm text-gray-900">${config.container_name || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500"><code class="text-xs font-mono">${config.container_port || config.port || '-'}</code></td>
-                    <td class="px-6 py-4">${protocolBadge}</td>
-                    <td class="px-6 py-4">${sslBadge}</td>
-                    <td class="px-6 py-4">${statusBadge}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${config.created_at ? new Date(config.created_at).toLocaleString('zh-CN') : '-'}</td>
-                </tr>`;
+                html += `
+                    <tr class="hover">
+                        <td class="font-medium text-blue-600"><a href="http://${config.domain}" target="_blank" class="hover:underline">${config.domain || '-'}</a></td>
+                        <td class="text-gray-900">${config.container_name || '-'}</td>
+                        <td><code class="text-xs font-mono text-gray-600">${config.container_port || config.port || '-'}</code></td>
+                        <td>${sslBadge}</td>
+                        <td>${statusBadge}</td>
+                        <td class="text-gray-500">${config.last_update ? new Date(config.last_update).toLocaleString('zh-CN') : '-'}</td>
+                    </tr>
+                `;
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             $('#proxyTable').html(html);
+            updatePaginationInfo();
         }
     </script>
 </body>
