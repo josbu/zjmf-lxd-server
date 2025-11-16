@@ -1,6 +1,7 @@
 # 新版本2.0项目发布
 新项目地址 [lxdapi-web-server](https://github.com/xkatld/lxdapi-web-server)
 - 支持各大主流财务 独立web面板 全网络配置支持 等全新设计和功能
+- 1.0版本将会 减少维护 处理不即时 等问题 建议使用2.0版本
 ---
 ## 魔方财务-LXD 对接插件 (zjmf-lxd-server)
 
