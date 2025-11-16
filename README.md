@@ -1,4 +1,4 @@
-# 新版本2.0项目
+# 新版本2.0项目发布
 新项目地址 [lxdapi-web-server](https://github.com/xkatld/lxdapi-web-server)
 - 支持各大主流财务 独立web面板 全网络配置支持 等全新设计和功能
 ---
