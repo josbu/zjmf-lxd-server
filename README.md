@@ -1,11 +1,11 @@
-# 魔方财务-LXD 对接插件 (zjmf-lxd-server)
+# 新版本2.0项目 》 [lxdapi-web-server](https://github.com/xkatld/lxdapi-web-server)
+— 支持各大主流财务 独立web面板 全网络配置支持 等全新设计和功能
+
+## 魔方财务-LXD 对接插件 (zjmf-lxd-server)
 
 这是一个为 [魔方财务](https://www.zjmf.com/) (ZJMF) 系统开发的 LXD 对接插件，为主机商提供完整的 LXD 容器销售与管理解决方案。
 
 **详细的安装和使用文档，请参考 [项目 Wiki](https://github.com/xkatld/zjmf-lxd-server/wiki)。**
-
-交流群：
-<img width="150" height="265" alt="image" src="https://github.com/user-attachments/assets/a9e6e62c-7cb7-4a27-903a-89a1406e9da4" />
 
 ## 项目特色
 
